@@ -18,7 +18,7 @@ const isXrplAddr = (s: string) => /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(s.trim()
 
 export function Create() {
   const nav = useNavigate();
-  const { wallet, connect } = useWallet();
+  const { wallet, connect, connecting, notice } = useWallet();
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -106,11 +106,17 @@ export function Create() {
               Connected: <span className="mono">{wallet.address}</span>
             </div>
           ) : (
-            <button className="btn btn-ghost" style={{ marginBottom: 16 }} onClick={async () => {
-              await connect();
-            }}>
-              Connect GemWallet
-            </button>
+            <div style={{ marginBottom: 16 }}>
+              <button className="btn btn-ghost" onClick={connect} disabled={connecting}>
+                {connecting ? "Looking for wallet…" : "Connect GemWallet"}
+              </button>
+              {notice === "no-wallet" && (
+                <p className="hint" style={{ fontSize: "0.8rem", color: "var(--mist)", marginTop: 10 }}>
+                  GemWallet not detected — no problem. Paste your XRPL address below; you'll pay by copying the
+                  payment details into Xaman or any wallet.
+                </p>
+              )}
+            </div>
           )}
           <div className="field">
             <label>Your XRPL address</label>
