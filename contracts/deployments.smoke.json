@@ -1,0 +1,20 @@
+{
+  "network": "coston2",
+  "fxrp": "0x68109F691ef62743885174CF187A9d244d07CdC4",
+  "assetManager": "0xE301ae687884E3dcdadc4B0d04b83554896bDD41",
+  "implementation": "0x90Bca7f8601c7BB8066D4C06e3Ec4b7861Cc5740",
+  "factory": "0xcC76Eff2f852A40390150201ab2e98f4066B5A3e",
+  "smokeVault": "0x77420B12eF10643E328A0E0Ba1B238901c8Ad870",
+  "config": {
+    "ownerXrplHash": "0xfb14c47a6d08a8bd1cdf29c39cb2dee2000cbbab973bf970d8dc1dad909c2c7f",
+    "beneficiaryXrplHash": "0x1a9a8873606a0d9c3e352650f83ec382c92e49cd4b2744128bb9b2ccf5ac57c9",
+    "beaconHash": "0x7b07fdb110e84733f7b4566f0259c294c9ce1c25042d8127910a0e53925e0553",
+    "heartbeatReference": "0xbacbe0afa61ed9846fab3b5e999e43a249f230b7b0b65d63146b0c15536c201b",
+    "heartbeatPeriod": "600",
+    "gracePeriod": "60",
+    "challengePeriod": "120",
+    "creationLedger": "19144364",
+    "creationTs": "1784298950",
+    "lotSizeUBA": "10000000"
+  }
+}

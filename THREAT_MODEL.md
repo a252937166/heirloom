@@ -1,0 +1,50 @@
+# Heirloom — Threat Model & Honest Boundaries
+
+Heirloom moves inheritance-grade value on consensus proofs. This document states plainly what protects you,
+what we trust, and what can still go wrong. Every mitigation listed as "on-chain" is enforced by the vault
+contract, not by our servers.
+
+## Authorization model
+
+The EVM side has **no privileged keys**. Every state change is authorized by one of:
+
+1. an owner-signed XRPL payment, proven by an FDC `XRPPayment` attestation (heartbeat, cancel, funding);
+2. a consensus proof of absence (`ReferencedPaymentNonexistence`) that anyone may submit;
+3. a public timeout (challenge period) that anyone may crank.
+
+The keeper is a convenience, not an authority: it can only submit proofs and cranks that any third party
+could produce from public data. If our keeper disappears, nothing is lost — any party can run the same
+open-source service against the same contracts.
+
+## Threats and mitigations
+
+| # | Threat | Status |
+|---|---|---|
+| 1 | **Fake liveness** — an attacker copies the owner's heartbeat memo to keep the vault alive and block inheritance | **Solved at the protocol level.** Silence proofs use `checkSourceAddresses` with the owner's address root; copycat payments are invisible to the attestation. Demonstrated on-chain (gate 1, round 1398559): attacker sent identical memos and the network still attested the silence. |
+| 2 | **Premature claim** — the beneficiary (or anyone) tries to release funds while the owner is alive | **Structurally impossible.** The claim requires an unbroken attestation chain starting at `lastHeartbeatLedger + 1` and covering the full period; while the owner heartbeats, the verifier answers `INVALID: REFERENCED TRANSACTION EXISTS`. After silence, the challenge window still lets one heartbeat veto the claim (`ClaimVetoed`, tested). An early `executeRelease` reverts with `ChallengeNotOver` (observed on-chain). |
+| 3 | **Window cheating** — a claimer picks a window that skips a heartbeat | Contract enforces exact chaining: first segment must start at `lastHeartbeatLedger + 1`, each next at the previous `firstOverflowBlockNumber`, and the final segment must cover `lastHeartbeatTs + period + grace`. A heartbeat bumps the epoch and voids all previous checkpoints. |
+| 4 | **Silence ≠ death** — hospital stays, lost phones, travel | Grace period + challenge window are first-class config. The owner's veto is a single 1-drop payment from anywhere in the world. Roadmap: multi-channel expiry reminders. |
+| 5 | **Keeper censorship or death** | All cranks are permissionless; the beneficiary's Recovery Kit contains everything needed to claim without us. Keeper is open source. |
+| 6 | **Wrong beneficiary address** | The address is committed as a hash at creation and revealed at claim; the UI shows a fingerprint at both ends and the Recovery Kit repeats it. Nothing can change it after creation except the owner cancelling and re-creating — by design. |
+| 7 | **FAssets redemption risk** — agent fails to pay the underlying XRP | FAssets' own default path compensates from agent collateral; the vault's `Releasing` state is re-crankable until the balance is settled. Sub-lot dust cannot be redeemed (FAssets lot size); the app enforces whole-lot funding so dust is ~zero. |
+| 8 | **Direct-minting edge cases** — payment below minimum fee is forfeited by the protocol; wrong memo strands the mint | The app computes the gross amount with a safety margin and renders the exact memo; the keeper watches for `DirectMintingExecuted`. Recovery guidance for stuck mints is part of the funding screen. |
+| 9 | **FCC / privacy expectations** | Heirloom does **not** claim private settlement: the final payout is a public XRPL transaction. On-chain, owner/beneficiary/beacon appear only as hashes until claim time — correlation from XRPL activity is possible and documented. |
+
+## Trust assumptions (stated, not hidden)
+
+- **Flare's FDC** — attestations are true if ≥ 50 % of data-provider signature weight is honest. This is the
+  same trust root as FTSO and the rest of the Flare protocol stack.
+- **FAssets** — custody of the underlying XRP sits with the FAssets system (agents + Core Vault with
+  governance oversight), not with Heirloom. We inherit its collateral and emergency-pause mechanics.
+- **XRPL finality** — 3-ledger confirmation depth (~12 s) before facts become attestable.
+- **Attestation history window** — measured at ~14 days on Coston2's verifiers; production vaults therefore
+  use 7-day rolling checkpoints (implemented and chain-tested) rather than single long windows.
+
+## Known limitations (v1)
+
+- Demo timing (minutes, clearly labelled) on Coston2; production timing is a config change.
+- One beneficiary per vault; value-split across several heirs is roadmap.
+- Sub-lot FXRP dust at release stays in the vault (app enforces whole-lot funding).
+- The keeper currently also acts as the direct-minting executor; any party can replace it.
+- Legal standing: transferring key control is not the same as transferring legal title. Pair Heirloom
+  with a will that names the same beneficiary.

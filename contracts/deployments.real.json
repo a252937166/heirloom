@@ -1,0 +1,9 @@
+{
+  "network": "coston2",
+  "fxrp": "0x0b6A3645c240605887a5532109323A3E12273dc7",
+  "assetManager": "0xc1Ca88b937d0b528842F95d5731ffB586f4fbDFA",
+  "implementation": "0x6D70A70a682ea5a9F37088b85Cf6941b03c4B361",
+  "factory": "0x090a69eE156108A6aE0a6a1a96575443ef4b584a",
+  "lotSizeUBA": "10000000",
+  "coreVaultXrpl": "rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p"
+}

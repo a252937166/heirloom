@@ -1,0 +1,13 @@
+node_modules/
+dist/
+cache/
+artifacts/
+typechain-types/
+keeper.log
+*.secret.json
+keeper/keeper-state.json
+spike/e2e-state.json
+spike/accounts.secret.json
+.env
+*.key
+.DS_Store
