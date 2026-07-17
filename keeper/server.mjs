@@ -101,11 +101,26 @@ app.post("/api/vaults/:addr/funded", async (req, res) => {
   try {
     await runJob(addr, "funding", async () => {
       rec(addr, "funding", "Funding payment seen — proving it to Flare (FDC XRPPayment)", { txXrpl: xrplTx });
-      const proof = await proveXrpPayment(agent, xrplTx);
-      const tx = await assetManager.executeDirectMinting({ merkleProof: proof.merkleProof, data: proof.data });
-      await tx.wait();
-      const bal = await fxrp.balanceOf(addr);
-      rec(addr, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP`, { txFlare: tx.hash, round: proof.meta.round, tone: "ok" });
+      // an official executor may beat us to executeDirectMinting — balance is the truth
+      let bal = await fxrp.balanceOf(addr);
+      if (bal === 0n) {
+        try {
+          const proof = await proveXrpPayment(agent, xrplTx);
+          bal = await fxrp.balanceOf(addr);
+          if (bal === 0n) {
+            const tx = await assetManager.executeDirectMinting({ merkleProof: proof.merkleProof, data: proof.data });
+            await tx.wait();
+            bal = await fxrp.balanceOf(addr);
+            rec(addr, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP`, { txFlare: tx.hash, round: proof.meta.round, tone: "ok" });
+          }
+        } catch (e) {
+          bal = await fxrp.balanceOf(addr);
+          if (bal === 0n) throw e; // real failure — surface it
+        }
+      }
+      if (bal > 0n && !(store.vaults[addr.toLowerCase()]?.events ?? []).some((ev) => ev.kind === "minted")) {
+        rec(addr, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP (executed by a network executor)`, { tone: "ok" });
+      }
       const v = vaultAt(addr);
       if (Number(await v.state()) === 1) {
         const atx = await v.activate();
@@ -229,6 +244,8 @@ async function beaconScan() {
       const seen = ((store.vaults[key] ??= { events: [], meta: {} }).meta.seenHb ??= []);
       const hash = tx.hash ?? t.hash;
       if (seen.includes(hash)) continue;
+      const vstate = Number(await vaultAt(vaultAddr).state());
+      if (vstate >= 4 || vstate === 0) { seen.push(hash); persist(); continue; } // finalized vaults ignore heartbeats
       seen.push(hash);
       persist();
       if (!jobs.get(key)) {

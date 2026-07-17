@@ -133,7 +133,7 @@ export function Vault() {
       <div className="two-col" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 36, marginTop: 30, alignItems: "start" }}>
         <div style={{ textAlign: "center" }}>
           <PulseDial lastAliveTs={v.lastHeartbeatTs} deadlineTs={v.state === 3 ? v.claimChallengeEndsAt : v.silenceDeadline} state={v.state}
-            label={v.state === 3 ? "challenge — one heartbeat vetoes" : undefined} />
+            label={v.state === 1 ? "waiting for funding" : v.state === 3 ? "challenge — one heartbeat vetoes" : undefined} />
           {v.state <= 3 && (
             <div style={{ marginTop: 18 }}>
               <button className="btn btn-primary" disabled={busy || !wallet.address} onClick={heartbeat}>
