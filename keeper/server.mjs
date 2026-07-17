@@ -251,11 +251,21 @@ async function beaconScan() {
       if (!jobs.get(key)) {
         runJob(vaultAddr, "heartbeat-auto", async () => {
           rec(vaultAddr, "heartbeat", "Heartbeat detected on the beacon — proving it", { txXrpl: hash });
-          const proof = await proveXrpPayment(agent, hash);
           const v = vaultAt(vaultAddr);
-          const tx2 = await v.recordHeartbeat(proof);
-          await tx2.wait();
-          rec(vaultAddr, "alive", `Heartbeat proven — epoch ${await v.heartbeatEpoch()}, dial reset`, { txFlare: tx2.hash, round: proof.meta.round, tone: "ok" });
+          const epochBefore = Number(await v.heartbeatEpoch());
+          const proof = await proveXrpPayment(agent, hash);
+          try {
+            const tx2 = await v.recordHeartbeat(proof);
+            await tx2.wait();
+            rec(vaultAddr, "alive", `Heartbeat proven — epoch ${await v.heartbeatEpoch()}, dial reset`, { txFlare: tx2.hash, round: proof.meta.round, tone: "ok" });
+          } catch (e) {
+            // another crank (anyone may submit) can land the same proof first
+            if (Number(await v.heartbeatEpoch()) > epochBefore) {
+              rec(vaultAddr, "alive", `Heartbeat proven — epoch ${await v.heartbeatEpoch()} (recorded by another crank), dial reset`, { round: proof.meta.round, tone: "ok" });
+            } else {
+              throw e;
+            }
+          }
         }).catch(() => {});
       }
     }

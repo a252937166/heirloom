@@ -49,14 +49,18 @@ if (!S.hbTx) {
   const hb = await sendXrplPayment(owner, S.beacon, 1n, S.reference.slice(2), "heartbeat");
   S.hbTx = hb.hash; save();
 }
-log("waiting for beacon auto-scan to prove the heartbeat…");
-for (let i = 0; i < 60; i++) {
-  const ks = await lastKind();
-  if (ks.includes("alive")) break;
-  if (i === 59) throw new Error("heartbeat proof timeout");
-  await sleep(10_000);
+log("waiting for the heartbeat to be proven (chain epoch is the truth)…");
+{
+  const { Contract } = await import("ethers");
+  const { provider, VAULT_ABI } = await import("./fdc-lib.mjs");
+  const v = new Contract(S.vault, VAULT_ABI, provider);
+  for (let i = 0; ; i++) {
+    if (Number(await v.heartbeatEpoch()) >= 1) break;
+    if (i >= 60) throw new Error("heartbeat proof timeout");
+    await sleep(10_000);
+  }
 }
-log("heartbeat proven by the live keeper (auto-scan)");
+log("heartbeat proven on-chain (epoch ≥ 1)");
 
 // 3. early claim must fail
 try {

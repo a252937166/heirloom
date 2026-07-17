@@ -7,5 +7,122 @@
   "beacon": "r4vEYPxYkEWzoEySUETDRgnUKu8GG9b1GN",
   "beneficiary": "rKZo43bi3Vt5ba9gKzUbzMGx4tXV9NUXpq",
   "fundTx": "7E48BC6E94DB6EB2A820D2D3F8B134EE3889F670581D18A6EBDD29B1221D4F7F",
-  "hbTx": "A410533D4C8038F062076B95BA3C4D7C0D81587AF28058204379AA19A80ECB11"
+  "hbTx": "A410533D4C8038F062076B95BA3C4D7C0D81587AF28058204379AA19A80ECB11",
+  "finalEvents": [
+    {
+      "at": 1784308000,
+      "kind": "created",
+      "label": "Vault created for rGRRECsJ… → rKZo43bi…",
+      "txFlare": "0x9b0192501cc9e2bf2c546a3dac54dff4db386ee8e2c1e79fa16beba8a388d502",
+      "tone": "gold"
+    },
+    {
+      "at": 1784308281,
+      "kind": "funding",
+      "label": "Funding payment seen — proving it to Flare (FDC XRPPayment)",
+      "txXrpl": "7E48BC6E94DB6EB2A820D2D3F8B134EE3889F670581D18A6EBDD29B1221D4F7F"
+    },
+    {
+      "at": 1784308403,
+      "kind": "error",
+      "label": "funding failed: execution reverted (unknown custom error)",
+      "tone": "warn"
+    },
+    {
+      "at": 1784308556,
+      "kind": "funding",
+      "label": "Funding payment seen — proving it to Flare (FDC XRPPayment)",
+      "txXrpl": "7E48BC6E94DB6EB2A820D2D3F8B134EE3889F670581D18A6EBDD29B1221D4F7F"
+    },
+    {
+      "at": 1784308556,
+      "kind": "minted",
+      "label": "FXRP minted into the vault: 10.07569 FXRP (executed by a network executor)",
+      "tone": "ok"
+    },
+    {
+      "at": 1784308560,
+      "kind": "active",
+      "label": "Vault is ACTIVE — the dial is live",
+      "txFlare": "0x86ff353515039f39bb45c1a8d14c0061dc8821996b3bb397b55fea26016294a8",
+      "tone": "ok"
+    },
+    {
+      "at": 1784308584,
+      "kind": "heartbeat",
+      "label": "Heartbeat detected on the beacon — proving it",
+      "txXrpl": "A410533D4C8038F062076B95BA3C4D7C0D81587AF28058204379AA19A80ECB11"
+    },
+    {
+      "at": 1784308675,
+      "kind": "error",
+      "label": "heartbeat-auto failed: execution reverted: \"stale\"",
+      "tone": "warn"
+    },
+    {
+      "at": 1784309413,
+      "kind": "claim",
+      "label": "Claim requested — asking Flare's network to attest the silence",
+      "tone": "warn"
+    },
+    {
+      "at": 1784309415,
+      "kind": "error",
+      "label": "claim failed: v.config is not a function",
+      "tone": "warn"
+    },
+    {
+      "at": 1784309774,
+      "kind": "claim",
+      "label": "Claim requested — asking Flare's network to attest the silence",
+      "tone": "warn"
+    },
+    {
+      "at": 1784309774,
+      "kind": "error",
+      "label": "claim failed: v.config is not a function",
+      "tone": "warn"
+    },
+    {
+      "at": 1784310650,
+      "kind": "claim",
+      "label": "Claim requested — asking Flare's network to attest the silence",
+      "tone": "warn"
+    },
+    {
+      "at": 1784310824,
+      "kind": "silence",
+      "label": "Silence attested through 1:50:41 AM",
+      "txFlare": "0x6f89bcd7e9050fa09485bbe905f3b353d32d9697eb319f845c8e742713ee59da",
+      "round": 1398674,
+      "tone": "warn"
+    },
+    {
+      "at": 1784310826,
+      "kind": "claimStarted",
+      "label": "Claim opened — challenge window running; one owner heartbeat cancels it",
+      "txFlare": "0x79dd4eec7b18521e7c3f481fc6e8c864647fd5580fcb61ef16eda8224bd9df59",
+      "tone": "warn"
+    },
+    {
+      "at": 1784311011,
+      "kind": "error",
+      "label": "claim failed: execution reverted (unknown custom error)",
+      "tone": "warn"
+    },
+    {
+      "at": 1784311148,
+      "kind": "released",
+      "label": "Release executed — FAssets redemption started to the beneficiary's XRPL wallet",
+      "txFlare": "0xa7ae82aa9cd7d9e30300e1ffa6ac18e21b5675dff51150665c759d039613e031",
+      "tone": "gold"
+    },
+    {
+      "at": 1784311180,
+      "kind": "settled",
+      "label": "Beneficiary received 9.95 XRP on their own wallet",
+      "txXrpl": "F1B2764CD5CAEC1E153E5C6C74539CCD65095AA5B0AA0232E3A57205B6584360",
+      "tone": "ok"
+    }
+  ]
 }

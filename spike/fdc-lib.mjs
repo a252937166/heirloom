@@ -263,6 +263,7 @@ export const VAULT_ABI = [
   "function heartbeatEpoch() view returns (uint32)",
   "function silenceDeadline() view returns (uint64)",
   "function beneficiaryXrpl() view returns (string)",
+  "function config() view returns (bytes32 ownerXrplHash, bytes32 beneficiaryXrplHash, bytes32 beaconHash, bytes32 heartbeatReference, uint64 heartbeatPeriod, uint64 gracePeriod, uint64 challengePeriod, uint64 creationLedger, uint64 creationTs, uint256 lotSizeUBA)",
 ];
 export const FACTORY_ABI = [
   "function createVault((bytes32,bytes32,bytes32,bytes32,uint64,uint64,uint64,uint64,uint64,uint256) c, uint256 crankRewardWei) payable returns (address)",
