@@ -83,14 +83,14 @@ beneficiary's wallet ◀─── real XRP
    and the dial go live. Send a heartbeat; open the beneficiary view and try to claim early — watch the chain refuse.
 3. **Deep:** contracts in [`contracts/`](contracts/) (19 unit tests incl. adversarial, veto-race and partial-redemption suites), proof mechanics in [`spike/`](spike/) (gate scripts with saved on-chain artifacts), keeper in [`keeper/`](keeper/), threat model in [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
-Demo timing note: heartbeat periods are minutes on testnet so the full story is visible in one sitting; production timing would be 90–180 days with 7-day rolling checkpoints (the ~14-day attestation window limit was measured, and the chaining is implemented and tested on-chain).
+Demo timing note: heartbeat periods are minutes on testnet so the full story is visible in one sitting; production timing would be 90–180 days with 7-day rolling checkpoints: the ~14-day attestation depth was measured, the chaining is contract-enforced, and the keeper now runs a checkpoint scheduler (compressed interval on testnet) that chains proof segments automatically before the window slides away.
 
 ## Repository
 
 | path | contents |
 |---|---|
 | `contracts/` | `HeirloomVault.sol` (7-state machine, dual-proof validation, challenge veto, XRPL-signed cancel, alternative EVM-owner mode), `HeirloomFactory.sol` (EIP-1167 clones), 19 tests, deploy scripts |
-| `keeper/` | permissionless crank service: proof automation, beacon auto-scan, REST API for the app |
+| `keeper/` | permissionless crank service: proof automation, auto-scans with self-healing retries, rolling-checkpoint scheduler, redemption-default path, crash-safe journaled state, REST API |
 | `web/` | the app — GemWallet integration, Pulse Dial, evidence timeline, printable Recovery Kit |
 | `spike/` | gate scripts that de-risked every primitive on-chain before the product was built, with saved proofs |
 | `docs/` | design document |

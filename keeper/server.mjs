@@ -12,10 +12,10 @@
 import express from "express";
 import cors from "cors";
 import { Contract, Interface, hexlify, keccak256, concat, toUtf8Bytes, randomBytes } from "ethers";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, renameSync, appendFileSync } from "node:fs";
 import {
   provider, log, sleep, addrHash, agentWallet, validatedLedger, xrplRpc,
-  proveXrpPayment, proveSilence, VAULT_ABI, FACTORY_ABI, XRP_DATA, buildMintMemo, DIRECT_MINT_PREFIX, vaultConfig,
+  proveXrpPayment, proveSilence, proveNonPayment, VAULT_ABI, FACTORY_ABI, XRP_DATA, buildMintMemo, DIRECT_MINT_PREFIX, vaultConfig,
 } from "../spike/fdc-lib.mjs";
 
 const AM_EVENTS = new Interface([
@@ -35,11 +35,42 @@ const assetManager = new Contract(dep.assetManager, [
 
 // --- persistent event store ---------------------------------------------------
 const storeFile = new URL("./keeper-state.json", import.meta.url);
-const store = existsSync(storeFile) ? JSON.parse(readFileSync(storeFile, "utf8")) : { vaults: {} };
-const persist = () => writeFileSync(storeFile, JSON.stringify(store, null, 2));
+const journalFile = new URL("./keeper-journal.ndjson", import.meta.url);
+function loadStore() {
+  try {
+    if (existsSync(storeFile)) return JSON.parse(readFileSync(storeFile, "utf8"));
+  } catch (e) {
+    // corrupted state (e.g. crash mid-write): rebuild from the append-only journal
+    log(`state file corrupt (${e.message}) — rebuilding from journal`);
+    const s = { vaults: {} };
+    if (existsSync(journalFile)) {
+      for (const line of readFileSync(journalFile, "utf8").split("\n")) {
+        if (!line.trim()) continue;
+        try {
+          const j = JSON.parse(line);
+          const v = (s.vaults[j.vault] ??= { events: [], meta: {} });
+          if (j.type === "event") v.events.push(j.event);
+          else if (j.type === "meta") Object.assign(v.meta, j.meta);
+        } catch { /* skip torn line */ }
+      }
+    }
+    return s;
+  }
+  return { vaults: {} };
+}
+const store = loadStore();
+const persist = () => {
+  // atomic: a crash can never leave a half-written state file behind
+  const tmp = new URL("./keeper-state.json.tmp", import.meta.url);
+  writeFileSync(tmp, JSON.stringify(store, null, 2));
+  renameSync(tmp, storeFile);
+};
+const journal = (obj) => { try { appendFileSync(journalFile, JSON.stringify(obj) + "\n"); } catch { /* best-effort */ } };
 function rec(vaultAddr, kind, label, extra = {}) {
   const v = (store.vaults[vaultAddr.toLowerCase()] ??= { events: [], meta: {} });
-  v.events.push({ at: Math.floor(Date.now() / 1000), kind, label, ...extra });
+  const event = { at: Math.floor(Date.now() / 1000), kind, label, ...extra };
+  v.events.push(event);
+  journal({ type: "event", vault: vaultAddr.toLowerCase(), event });
   persist();
   log(`[${vaultAddr.slice(0, 8)}] ${label}`);
 }
@@ -309,6 +340,10 @@ app.post("/api/vaults/:addr/release", async (req, res) => {
               valueUBA: String(p.args.valueUBA),
               feeUBA: String(p.args.feeUBA),
               agentVault: p.args.agentVault,
+              paymentAddress: p.args.paymentAddress,
+              firstUnderlyingBlock: String(p.args.firstUnderlyingBlock),
+              lastUnderlyingBlock: String(p.args.lastUnderlyingBlock),
+              lastUnderlyingTimestamp: String(p.args.lastUnderlyingTimestamp),
             });
           }
         } catch {}
@@ -341,7 +376,11 @@ app.post("/api/vaults/:addr/release", async (req, res) => {
           }
         }
       }
-      if (wanted.size) rec(addr, "settling", "Redemption payment(s) still inside the agent window — tracking by payment reference", { tone: "warn" });
+      if (wanted.size) {
+        rec(addr, "settling", "Redemption payment(s) still inside the agent window — tracking by payment reference; if the agent misses the underlying deadline, the FAssets default path (collateral compensation) becomes available", { tone: "warn" });
+        meta.awaitingSettlement = [...wanted];
+        persist();
+      }
       const residual = Number(await fxrp.balanceOf(addr)) / 1e6;
       if (residual > 0) rec(addr, "residual", `Residual ${residual} FXRP remains (below the protocol redemption minimum)`, { tone: "warn" });
     });
@@ -392,6 +431,59 @@ app.post("/api/vaults/:addr/simulate-early-claim", async (req, res) => {
     }
   } catch (e) {
     res.status(500).send(e.shortMessage ?? e.message);
+  }
+});
+
+// Redemption default: if the agent misses the underlying payment window, a
+// non-payment proof lets the redeemer (this vault) claim collateral
+// compensation via the FAssets protocol. Compensation lands on the redeemer
+// (the vault contract) as Flare-side collateral — disclosed honestly.
+const RPN_DATA = "tuple(bytes32 attestationType, bytes32 sourceId, uint64 votingRound, uint64 lowestUsedTimestamp, tuple(uint32 minimalBlockNumber, uint32 deadlineBlockNumber, uint64 deadlineTimestamp, bytes32 destinationAddressHash, uint256 amount, bytes32 standardPaymentReference, bool checkSourceAddresses, bytes32 sourceAddressesRoot) requestBody, tuple(uint64 minimalBlockTimestamp, uint32 firstOverflowBlockNumber, uint64 firstOverflowBlockTimestamp) responseBody) data";
+const amDefault = new Contract(dep.assetManager, [
+  `function redemptionPaymentDefault(tuple(bytes32[] merkleProof, ${RPN_DATA}) _proof, uint256 _redemptionRequestId)`,
+], agent);
+
+async function tryRedemptionDefault(addr, r) {
+  const nowL = await validatedLedger();
+  if (nowL.ledger <= Number(r.lastUnderlyingBlock) + 4 || nowL.ts <= Number(r.lastUnderlyingTimestamp) + 15) {
+    return { eligible: false, reason: "agent window still open" };
+  }
+  rec(addr, "defaulting", `Agent missed the underlying window for redemption #${r.requestId} — proving non-payment to claim protocol collateral`, { tone: "warn" });
+  const amountDrops = BigInt(r.valueUBA) - BigInt(r.feeUBA);
+  const proof = await proveNonPayment(agent, {
+    redeemerXrpl: r.paymentAddress,
+    amountDrops: String(amountDrops),
+    paymentReference: r.paymentReference,
+    firstBlock: r.firstUnderlyingBlock,
+    lastBlock: r.lastUnderlyingBlock,
+    lastTimestamp: r.lastUnderlyingTimestamp,
+  });
+  const tx = await amDefault.redemptionPaymentDefault({ merkleProof: proof.merkleProof, data: proof.data }, BigInt(r.requestId));
+  await tx.wait();
+  rec(addr, "defaulted", `Redemption #${r.requestId} defaulted — protocol collateral compensation secured to the vault (Flare-side assets; distribution to the XRPL beneficiary is roadmap)`, { txFlare: tx.hash, round: proof.meta.round, tone: "gold" });
+  return { eligible: true, txFlare: tx.hash };
+}
+
+app.post("/api/vaults/:addr/redemption-default", async (req, res) => {
+  const { addr } = req.params;
+  try {
+    const meta = metaOf(addr);
+    const pending = (meta.redemptions ?? []).filter((r) => (meta.awaitingSettlement ?? []).includes(r.paymentReference));
+    if (!pending.length) return res.status(400).send("no unsettled redemption on record for this vault");
+    await runJob(addr, "redemption-default", async () => {
+      for (const r of pending) {
+        const out = await tryRedemptionDefault(addr, r);
+        if (out.eligible) {
+          meta.awaitingSettlement = (meta.awaitingSettlement ?? []).filter((x) => x !== r.paymentReference);
+          persist();
+        } else {
+          rec(addr, "settling", `Redemption #${r.requestId}: ${out.reason} — default not yet available`, { tone: "warn" });
+        }
+      }
+    });
+    res.json({ ok: true, job: "redemption-default" });
+  } catch (e) {
+    res.status(409).send(e.shortMessage ?? e.message);
   }
 });
 
@@ -610,8 +702,44 @@ async function pendingScan() {
     }
   }
 }
+// Rolling silence checkpoints: production plans run 90-180 days but FDC can
+// only attest ~14 days back, so the keeper checkpoints every interval —
+// chained strictly, exactly like the gate2 experiment. Compressed on testnet.
+const CHECKPOINT_SEC = Number(process.env.CHECKPOINT_SEC ?? 900); // 7 days in production
+async function checkpointScan() {
+  for (const [key, sv] of Object.entries(store.vaults)) {
+    if (jobs.get(key)) continue;
+    const meta = sv.meta ?? {};
+    if (meta.mode === "evm") continue; // consensus time needs no checkpoints
+    if (!meta.ownerXrpl) continue;
+    if (Date.now() - (meta.lastCkptAt ?? 0) < CHECKPOINT_SEC * 1000) continue;
+    try {
+      const v = vaultAt(key);
+      if (Number(await v.state()) !== 2) continue;
+      const [lastTs, provenTs] = await Promise.all([v.lastHeartbeatTs(), v.silenceProvenThroughTs()]);
+      const nowTs = Math.floor(Date.now() / 1000);
+      // only meaningful once real silence has accumulated beyond the interval
+      if (nowTs - Number(lastTs) < CHECKPOINT_SEC || nowTs - Number(provenTs) < CHECKPOINT_SEC) continue;
+      meta.lastCkptAt = Date.now(); persist();
+      runJob(key, "checkpoint", async () => {
+        const nowL = await validatedLedger();
+        const minLedger = Number(await v.nextSilenceLedger());
+        const cfg = await vaultConfig(v);
+        rec(key, "checkpoint", "Rolling silence checkpoint — chaining a proof segment before the attestation window slides away", { tone: "warn" });
+        const proof = await proveSilence(agent, {
+          beacon: BEACON, reference: cfg.heartbeatReference, ownerAddress: meta.ownerXrpl,
+          minLedger, deadlineLedger: nowL.ledger - 4, deadlineTs: nowL.ts - 15,
+        });
+        const stx = await v.attestSilence(proof);
+        await stx.wait();
+        rec(key, "silence", `Checkpoint attested — silence proven through ${new Date(Number(await v.silenceProvenThroughTs()) * 1000).toLocaleTimeString()}`, { txFlare: stx.hash, round: proof.meta.round, tone: "warn" });
+      }).catch(() => {});
+    } catch { /* per-vault errors never break the scan */ }
+  }
+}
 setInterval(fundingScan, 30_000);
 setInterval(pendingScan, 45_000);
+setInterval(checkpointScan, 120_000);
 
 const PORT = process.env.PORT ?? 8787;
 app.listen(PORT, () => log(`heirloom keeper listening on :${PORT} (factory ${dep.factory})`));

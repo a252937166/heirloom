@@ -1,6 +1,6 @@
 // The Connections dialog — sectioned by ledger, XRPL-native first.
 // EVM wallets are listed from EIP-6963 discovery with their real names/icons.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WalletOption, detectedWallets } from "../lib/evm";
 import { detectWallet } from "../lib/gem";
 
@@ -55,6 +55,29 @@ export function WalletModal({ open, onClose, onXrpl, onEvm, busy }: {
 }) {
   const [gemInstalled, setGemInstalled] = useState<boolean | null>(null);
   const [evmList, setEvmList] = useState<WalletOption[]>([]);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // focus management: trap Tab inside the dialog, restore focus on close
+  useEffect(() => {
+    if (!open) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const focusables = () =>
+      [...(panelRef.current?.querySelectorAll<HTMLElement>("button, a[href]") ?? [])].filter((el) => !el.hasAttribute("disabled"));
+    setTimeout(() => focusables()[1]?.focus(), 30); // first wallet row (index 0 is the close ✕)
+    const onTab = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const els = focusables();
+      if (!els.length) return;
+      const first = els[0], last = els[els.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    window.addEventListener("keydown", onTab);
+    return () => {
+      window.removeEventListener("keydown", onTab);
+      opener?.focus?.();
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -70,7 +93,7 @@ export function WalletModal({ open, onClose, onXrpl, onEvm, busy }: {
   return (
     <div onClick={onClose} className="no-print" role="dialog" aria-modal="true" aria-label="Connections"
       style={{ position: "fixed", inset: 0, zIndex: 60, background: "color-mix(in srgb, var(--ink) 72%, transparent)", backdropFilter: "blur(6px)", display: "grid", placeItems: "center", padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()}
+      <div onClick={(e) => e.stopPropagation()} ref={panelRef}
         style={{ width: "min(420px, 100%)", background: "var(--ink-2)", border: "1px solid var(--line)", borderRadius: 18, padding: "22px 22px 20px", boxShadow: "0 24px 80px rgba(0,0,0,.5)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <h3 style={{ fontFamily: "var(--font-display)", fontSize: "1.25rem", color: "var(--paper)" }}>Connections</h3>

@@ -1,0 +1,36 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: web
+      - run: npx tsc --noEmit
+        working-directory: web
+      - run: npx vite build
+        working-directory: web
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: contracts
+      - run: npx hardhat test
+        working-directory: contracts
+  secrets-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: no tracked secrets
+        run: |
+          if git ls-files | grep -E '(accounts\.secret|\.key$|keeper-state\.json$)'; then
+            echo "tracked secret-like file found"; exit 1
+          fi

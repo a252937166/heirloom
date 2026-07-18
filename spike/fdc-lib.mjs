@@ -242,6 +242,23 @@ export async function proveSilence(signer, { beacon, reference, ownerAddress, mi
   return { merkleProof: r.proof, data: decodeRpn(r.response_hex), meta: r };
 }
 
+/** Non-payment proof for a redemption default: proves the agent did NOT pay
+ *  the redeemer within the request's underlying window. No source filter —
+ *  any payment carrying the reference to the redeemer would count. */
+export async function proveNonPayment(signer, { redeemerXrpl, amountDrops, paymentReference, firstBlock, lastBlock, lastTimestamp }) {
+  const r = await attest(signer, "ReferencedPaymentNonexistence", {
+    minimalBlockNumber: String(firstBlock),
+    deadlineBlockNumber: String(lastBlock),
+    deadlineTimestamp: String(lastTimestamp),
+    destinationAddressHash: addrHash(redeemerXrpl),
+    amount: String(amountDrops),
+    standardPaymentReference: paymentReference,
+    checkSourceAddresses: false,
+    sourceAddressesRoot: "0x" + "00".repeat(32),
+  });
+  return { merkleProof: r.proof, data: decodeRpn(r.response_hex), meta: r };
+}
+
 // --- direct minting ----------------------------------------------------------
 
 export const DIRECT_MINT_PREFIX = "4642505266410018";
