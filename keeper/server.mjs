@@ -271,6 +271,8 @@ app.post("/api/vaults/:addr/release", async (req, res) => {
             wanted.delete(ref);
             const r = reqs.find((x) => x.paymentReference === ref);
             const delivered = (t.meta ?? t.metaData)?.delivered_amount ?? txj.Amount;
+            (meta.settlements ??= []).push({ requestId: r.requestId, deliveredDrops: String(delivered), txXrpl: txj.hash ?? t.hash, paymentReference: ref });
+            persist();
             rec(addr, "settled",
               `Redemption #${r.requestId} settled: ${(Number(delivered) / 1e6).toFixed(2)} XRP delivered with payment reference ${ref.slice(0, 14)}…`,
               { txXrpl: txj.hash ?? t.hash, tone: "ok" });
@@ -284,6 +286,50 @@ app.post("/api/vaults/:addr/release", async (req, res) => {
     res.json({ ok: true, job: "release" });
   } catch (e) {
     res.status(409).send(e.shortMessage ?? e.message);
+  }
+});
+
+const VAULT_ERRORS = new Interface([
+  "error SilenceNotProven()", "error BadState(uint8 s)", "error ChallengeNotOver()",
+  "error NotBeneficiary()", "error BadProof()", "error StaleProof()",
+]);
+// P0: the early-claim drill must report chain truth — a staticCall against
+// startClaim returns exactly why (or whether) the contract refuses. Nothing
+// is ever executed by this endpoint.
+app.post("/api/vaults/:addr/simulate-early-claim", async (req, res) => {
+  const { beneficiaryXrpl } = req.body ?? {};
+  if (!beneficiaryXrpl) return res.status(400).send("beneficiaryXrpl required");
+  try {
+    const v = vaultAt(req.params.addr);
+    const [state, deadline] = await Promise.all([v.state(), v.silenceDeadline()]);
+    const now = Math.floor(Date.now() / 1000);
+    try {
+      await v.startClaim.staticCall(beneficiaryXrpl);
+      rec(req.params.addr, "drill", "Early-claim drill: the inactivity window has elapsed — a real claim could start now (nothing was executed)", { tone: "warn" });
+      return res.json({ blocked: false, stage: "window-open", reason: "SILENCE_WINDOW_ELAPSED", fundsMoved: "0" });
+    } catch (e) {
+      let reason = null;
+      const data = e.data ?? e.info?.error?.data;
+      try { reason = VAULT_ERRORS.parseError(data)?.name ?? null; } catch { /* unknown selector */ }
+      if (!reason) {
+        const m = String(e.shortMessage ?? e.message);
+        reason = /SilenceNotProven|ChallengeNotOver|BadState|NotBeneficiary/.exec(m)?.[0] ?? "REVERTED";
+      }
+      rec(req.params.addr, "drill", `Early-claim drill: blocked on-chain (${reason}) — funds moved: 0`, { tone: "ok" });
+      return res.json({
+        blocked: true,
+        stage: Number(state) === 3 ? "challenge" : "silence-proof",
+        reason,
+        detail: reason === "SilenceNotProven"
+          ? (now <= Number(deadline)
+              ? "the owner is inside their window — the FDC verifier would answer REFERENCED TRANSACTION EXISTS; the proof cannot even be built"
+              : "no silence attestation has been submitted for this window yet")
+          : undefined,
+        fundsMoved: "0",
+      });
+    }
+  } catch (e) {
+    res.status(500).send(e.shortMessage ?? e.message);
   }
 });
 
@@ -313,6 +359,7 @@ app.get("/api/vaults/:addr", (req, res) => {
     events: v.events,
     job: job ? { name: job.name, startedAt: job.startedAt } : null,
     recovery: { ownerXrpl: ownerXrpl ?? null, ownerEvm: ownerEvm ?? null, mode: mode ?? (ownerEvm ? "evm" : "xrpl"), beneficiaryXrpl: beneficiaryXrpl ?? null, reference: reference ?? null, beacon: BEACON },
+    receipt: { redemptions: v.meta?.redemptions ?? [], settlements: v.meta?.settlements ?? [] },
   });
 });
 

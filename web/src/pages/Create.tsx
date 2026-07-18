@@ -138,19 +138,22 @@ export function Create() {
             </div>
           ) : (
             <div style={{ marginBottom: 14 }}>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <button className="btn btn-ghost" onClick={connect} disabled={connecting}>
-                  {connecting ? "Looking for wallet…" : "Connect GemWallet (XRPL)"}
-                </button>
-                <button className="btn btn-ghost" onClick={openConnect} disabled={connecting} style={{ opacity: 0.85 }}>
-                  EVM wallet (MetaMask / OKX)
-                </button>
-              </div>
-              <p className="hint" style={{ fontSize: "0.8rem", color: "var(--mist)", marginTop: 10 }}>
-                The XRPL wallet is the native path — 1-drop heartbeats, proven by Flare. No XRPL wallet? Use
-                MetaMask/OKX: Coston2 is added automatically and check-ins are one click. Or paste addresses
-                below and pay from any wallet.
-              </p>
+              <button className="btn btn-primary" onClick={connect} disabled={connecting}>
+                {connecting ? "Looking for wallet…" : "Continue with GemWallet (XRPL)"}
+              </button>
+              <details style={{ marginTop: 10 }}>
+                <summary style={{ cursor: "pointer", color: "var(--mist-2)", fontSize: "0.8rem" }}>Other setup options</summary>
+                <div style={{ display: "grid", gap: 8, paddingTop: 10 }}>
+                  <button className="btn btn-ghost" onClick={openConnect} disabled={connecting} style={{ justifySelf: "start" }}>
+                    EVM wallet (MetaMask / OKX) — alternative setup
+                  </button>
+                  <p className="hint" style={{ fontSize: "0.76rem", color: "var(--mist-2)", margin: 0 }}>
+                    Different model, honestly stated: silence is measured by Flare consensus time instead of an
+                    FDC proof-of-absence; check-ins become one-click Flare transactions. Or skip wallets — paste
+                    your XRPL address below and pay from any wallet.
+                  </p>
+                </div>
+              </details>
             </div>
           )}
           <div className="field">
@@ -169,8 +172,9 @@ export function Create() {
                   onClick={() => set("beneficiaryXrpl", CONFIG.demoBeneficiary)}>
                   Use the demo beneficiary
                 </button>
-                <span style={{ color: "var(--mist-2)", fontSize: "0.76rem" }}>
-                  just exploring? This is "Maya" from the live case — payouts to her wallet are publicly visible.
+                <span style={{ color: "var(--lamplight)", fontSize: "0.74rem" }}>
+                  Judge demo only — this is "Maya", a public test wallet: any payout is visible to everyone.
+                  Never use it for a personal plan.
                 </span>
               </span>
             )}
@@ -239,8 +243,8 @@ export function Create() {
           <div style={{ fontSize: "0.98rem", color: "var(--paper)", display: "grid", gap: 10, marginBottom: 18 }}>
             <p style={{ color: "var(--paper)" }}>
               · As long as you check in within <strong>{mins(draft.heartbeatPeriod)}</strong>
-              {evmMode ? ` (one click in ${evm.kind ?? "your wallet"})` : ""}, nobody can touch
-              this vault — not the beneficiary, not Heirloom, not anyone.
+              {evmMode ? ` (one click in ${evm.kind ?? "your wallet"})` : ""}, Heirloom cannot redirect or
+              release this vault, and the beneficiary cannot claim — the contract refuses early access.
             </p>
             <p style={{ color: "var(--paper)" }}>
               · After {mins(draft.heartbeatPeriod)} plus {mins(draft.grace)} of grace,{" "}
@@ -256,6 +260,14 @@ export function Create() {
               their wallet. You can cancel and take everything back at any time before that.
             </p>
           </div>
+          <div className="status-grid" style={{ marginBottom: 16 }}>
+            <div className="stat"><div className="k">You send (one XRPL payment)</div><div className="v">≈ {(Math.ceil((draft.lots * 10 + 0.1 + 0.15) / 0.9975 * 100) / 100).toFixed(2)} XRP</div></div>
+            <div className="stat"><div className="k">Protected after minting</div><div className="v">≈ {draft.lots * 10} FXRP</div></div>
+          </div>
+          <p className="hint" style={{ fontSize: "0.74rem", color: "var(--mist-2)", marginBottom: 14 }}>
+            The difference covers the FAssets minting fee (~0.25%) and the executor fee. On release, the vault
+            redeems the maximum the protocol accepts; a residual below the protocol minimum stays visible on-chain.
+          </p>
           <div style={{ display: "flex", gap: 10 }}>
             <button className="btn btn-ghost" onClick={() => setStep(2)}>Adjust</button>
             <button className="btn btn-primary" disabled={busy} onClick={createVault}>

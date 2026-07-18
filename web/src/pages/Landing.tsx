@@ -1,54 +1,119 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CONFIG } from "../config";
-import { StoryPlayer } from "../components/StoryPlayer";
 import { FlareMark } from "../components/FlareMark";
+import { PulseDial } from "../components/PulseDial";
+import { factory, fxrp } from "../lib/chain";
+import mcase from "../case-001.json";
+
+// live, honest numbers straight from the chain — no marketing counters
+function useLiveStats() {
+  const [stats, setStats] = useState<{ plans: number | null; protectedXrp: string | null }>({ plans: null, protectedXrp: null });
+  useEffect(() => {
+    (async () => {
+      try {
+        const count = Number(await factory.vaultCount());
+        let sum = 0n;
+        const n = Math.min(count, 24);
+        const addrs = await Promise.all(Array.from({ length: n }, (_, i) => factory.vaults(i).catch(() => null)));
+        const bals = await Promise.all(addrs.filter(Boolean).map((a) => fxrp.balanceOf(a).catch(() => 0n)));
+        for (const b of bals) sum += b as bigint;
+        setStats({ plans: count, protectedXrp: (Number(sum) / 1e6).toFixed(2) });
+      } catch { /* stats are decorative — the case strip below carries the proof */ }
+    })();
+  }, []);
+  return stats;
+}
+
+const CASE_NODES: [string, string][] = [
+  ["✓", "Promise"], ["✓", "Funded"], ["✓", "Heartbeat"], ["✕", "Early claim"],
+  ["✓", "Silence"], ["✓", "Challenge"], ["✓", "Payout"],
+];
 
 export function Landing() {
+  const stats = useLiveStats();
+  const now = Math.floor(Date.now() / 1000);
   return (
     <main>
-      {/* 1 · hero: the task, not the protocol */}
-      <section className="wrap" style={{ padding: "78px 24px 54px", maxWidth: 900, textAlign: "center" }}>
-        <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 7, justifyContent: "center" }}>The continuity vault for XRP · built on <FlareMark size={15} /></div>
-        <h1 style={{ margin: "16px 0 18px" }}>
-          Keep the keys.<br />
-          <em style={{ color: "var(--lamplight)", fontStyle: "italic" }}>Leave a path.</em>
-        </h1>
-        <p style={{ fontSize: "1.08rem", maxWidth: 640, margin: "0 auto" }}>
-          You stay in control through simple XRP heartbeats. If those heartbeats stop, Flare proves the
-          silence, gives you one final veto window — and only then redeems your XRP to the wallet you chose.
-        </p>
-        <div style={{ display: "flex", gap: 14, marginTop: 30, justifyContent: "center", flexWrap: "wrap" }}>
-          <Link to="/case/001" className="btn btn-primary">Watch a real plan complete</Link>
-          <Link to="/create" className="btn btn-ghost">Create a test plan</Link>
+      {/* 1 · hero: the task on the left, the living dial on the right */}
+      <section className="wrap hero-grid" style={{ padding: "64px 24px 46px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 40, alignItems: "center" }}>
+        <div>
+          <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 7 }}>The continuity vault for XRP · built on <FlareMark size={15} /></div>
+          <h1 style={{ margin: "16px 0 18px" }}>
+            Keep the keys.<br />
+            <em style={{ color: "var(--lamplight)", fontStyle: "italic" }}>Leave a path.</em>
+          </h1>
+          <p style={{ fontSize: "1.08rem", maxWidth: 560 }}>
+            You stay in control through simple XRP heartbeats. If those heartbeats stop, Flare proves the
+            silence, gives you one final veto window — and only then redeems your XRP to the wallet you chose.
+          </p>
+          <div style={{ display: "flex", gap: 14, marginTop: 28, flexWrap: "wrap" }}>
+            <Link to="/case/001" className="btn btn-primary">Watch a real plan complete</Link>
+            <Link to="/create" className="btn btn-ghost">Create a test plan</Link>
+          </div>
+          <p className="mono" style={{ fontSize: "0.72rem", marginTop: 16, color: "var(--mist-2)" }}>
+            No EVM wallet needed on the XRP-native path · no seed phrases shared · no company custody.
+          </p>
         </div>
-        <p className="mono" style={{ fontSize: "0.72rem", marginTop: 18, color: "var(--mist-2)" }}>
-          No EVM wallet. No seed phrases shared. No company custody.
-        </p>
+        <div style={{ textAlign: "center", justifySelf: "center" }}>
+          <PulseDial size={230} lastAliveTs={now - 480} deadlineTs={now + 3120} state={2} label="you're in control — heartbeat received" />
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
+            <span className="pill" style={{ fontSize: "0.62rem", color: "var(--verdant)" }}>silence window · not started</span>
+            <span className="pill" style={{ fontSize: "0.62rem", color: "var(--mist-2)" }}>final veto · not started</span>
+          </div>
+        </div>
       </section>
 
-      {/* 2 · the real plan, replayed */}
-      <section id="story" className="wrap" style={{ padding: "44px 24px" }}>
-        <div className="eyebrow">One plan · two people · five moments</div>
-        <h2 style={{ margin: "10px 0 6px" }}>A real plan, replayed.</h2>
-        <p style={{ fontSize: "0.92rem", marginBottom: 18, maxWidth: 640 }}>
-          This is not a mockup. "Alex" and "Maya" are names for the story — the vault, the proofs and every
-          transaction below ran on Flare Coston2 and the XRPL testnet, and each one links to its explorer page.
-        </p>
-        <StoryPlayer />
-        <div className="card" style={{ marginTop: 18, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-          <div>
-            <div className="mono" style={{ fontSize: "0.66rem", color: "var(--verdant)", marginBottom: 6 }}>CASE 001 · COMPLETED</div>
-            <p style={{ fontSize: "0.88rem", color: "var(--mist)", margin: 0 }}>
-              One funding payment · one owner heartbeat · one blocked early claim · one verified silence
-              window · native XRP payout confirmed — with a reconciled receipt and integrity checks.
-            </p>
+      {/* live counters — honest, read from the chain */}
+      <section className="wrap" style={{ padding: "0 24px 34px" }}>
+        <div style={{ display: "flex", gap: 26, flexWrap: "wrap", borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)", padding: "14px 4px" }}>
+          {[
+            ["Plans created", stats.plans === null ? "…" : String(stats.plans)],
+            ["XRP protected right now", stats.protectedXrp === null ? "…" : `${stats.protectedXrp} FXRP`],
+            ["Canonical case", "settled · reconciled"],
+            ["Custody", "100% non-custodial"],
+          ].map(([k, v]) => (
+            <span key={k} className="mono" style={{ fontSize: "0.74rem", color: "var(--mist)" }}>
+              {k} <strong style={{ color: "var(--paper)" }}>{v}</strong>
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {/* 2 · the canonical case, compressed to one strip (full story lives in /case/001) */}
+      <section className="wrap" style={{ padding: "10px 24px 40px" }}>
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
+            <div>
+              <span className="mono" style={{ fontSize: "0.66rem", color: "var(--verdant)" }}>A REAL PLAN, SETTLED · CASE #001</span>
+              <h2 style={{ margin: "6px 0 0", fontSize: "1.4rem" }}>Alex → Maya, end to end.</h2>
+            </div>
+            <span className="mono" style={{ fontSize: "0.7rem", color: "var(--mist)" }}>
+              {mcase.protectedFxrp} FXRP protected · {mcase.payoutXrp} XRP delivered · {mcase.finalFxrpBalance} FXRP residual, disclosed
+            </span>
           </div>
-          <Link className="btn btn-ghost" to="/case/001" style={{ whiteSpace: "nowrap" }}>Open the full case dashboard →</Link>
+          <div className="rail-row" style={{ display: "flex", gap: 8, alignItems: "center", overflowX: "auto", padding: "4px 0 12px" }}>
+            {CASE_NODES.map(([mark, label], i) => (
+              <span key={label} style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+                {i > 0 && <span className="rail-sep" style={{ flex: 1, height: 1, background: "var(--line)", minWidth: 12 }} />}
+                <span className="pill" style={{ whiteSpace: "nowrap", fontSize: "0.68rem", color: mark === "✕" ? "var(--ember)" : "var(--verdant)" }}>
+                  {mark} {label}
+                </span>
+              </span>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <Link to="/case/001" className="btn btn-primary" style={{ padding: "9px 18px", fontSize: "0.85rem" }}>Open the live case</Link>
+            <Link to="/case/001?tour=1" className="btn btn-ghost" style={{ padding: "9px 18px", fontSize: "0.85rem" }}>▶ 90-second tour</Link>
+            <span className="mono" style={{ alignSelf: "center", fontSize: "0.66rem", color: "var(--mist-2)" }}>
+              every step links to a public transaction · integrity checks generated from chain data
+            </span>
+          </div>
         </div>
       </section>
 
       {/* 3 · two perspectives */}
-      <section className="wrap" style={{ padding: "44px 24px" }}>
+      <section className="wrap" style={{ padding: "24px 24px" }}>
         <div className="eyebrow">Two people, one promise</div>
         <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginTop: 16 }}>
           <div className="card">
@@ -73,7 +138,7 @@ export function Landing() {
       </section>
 
       {/* 4 · the plan survives two attacks */}
-      <section id="impossible" className="wrap" style={{ padding: "44px 24px" }}>
+      <section id="impossible" className="wrap" style={{ padding: "24px 24px" }}>
         <div className="eyebrow">Watch the plan survive two attacks</div>
         <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginTop: 16 }}>
           <div className="card">
@@ -102,7 +167,7 @@ export function Landing() {
       </section>
 
       {/* 5 · why only Flare */}
-      <section className="wrap" style={{ padding: "44px 24px" }}>
+      <section className="wrap" style={{ padding: "24px 24px" }}>
         <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 7 }}>Why this needs <FlareMark size={16} /> — two ledgers, one plan</div>
         <div className="rails" style={{ marginTop: 8 }}>
           <span className="rail-label xrpl">XRP Ledger — where you act</span>

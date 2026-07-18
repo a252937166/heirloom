@@ -9,8 +9,9 @@ function Row({ icon, name, note, right, onClick, disabled }: {
   right?: React.ReactNode; onClick?: () => void; disabled?: boolean;
 }) {
   const [hover, setHover] = useState(false);
+  const Tag: "button" | "div" = onClick && !disabled ? "button" : "div"; // never nest links inside a button
   return (
-    <button onClick={onClick} disabled={disabled || !onClick}
+    <Tag onClick={onClick} {...(Tag === "button" ? { disabled } : {})}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left",
@@ -27,7 +28,7 @@ function Row({ icon, name, note, right, onClick, disabled }: {
         {note && <span className="mono" style={{ display: "block", fontSize: "0.64rem", color: "var(--mist-2)", marginTop: 2 }}>{note}</span>}
       </span>
       {right ?? <span style={{ color: "var(--mist-2)" }}>›</span>}
-    </button>
+    </Tag>
   );
 }
 
@@ -67,7 +68,7 @@ export function WalletModal({ open, onClose, onXrpl, onEvm, busy }: {
 
   if (!open) return null;
   return (
-    <div onClick={onClose} className="no-print"
+    <div onClick={onClose} className="no-print" role="dialog" aria-modal="true" aria-label="Connections"
       style={{ position: "fixed", inset: 0, zIndex: 60, background: "color-mix(in srgb, var(--ink) 72%, transparent)", backdropFilter: "blur(6px)", display: "grid", placeItems: "center", padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()}
         style={{ width: "min(420px, 100%)", background: "var(--ink-2)", border: "1px solid var(--line)", borderRadius: 18, padding: "22px 22px 20px", boxShadow: "0 24px 80px rgba(0,0,0,.5)" }}>

@@ -46,7 +46,7 @@ export default function App() {
   const [acctOpen, setAcctOpen] = useState(false);
   const [acctBal, setAcctBal] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [faucetOpen, setFaucetOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [faucetMsg, setFaucetMsg] = useState<string | null>(null);
   const loc = useLocation();
 
@@ -163,14 +163,12 @@ export default function App() {
   const fundXrp = async () => {
     if (!wallet.address) {
       window.open("https://xrpl.org/resources/dev-tools/xrp-faucets", "_blank");
-      setFaucetOpen(false);
       return;
     }
     setFaucetMsg("requesting…");
     const ok = await fundTestXrp(wallet.address);
     setFaucetMsg(ok ? "Test XRP requested — it lands on your wallet in a few seconds." : "Faucet unreachable — try xrpl.org/resources/dev-tools/xrp-faucets.");
     setTimeout(() => setFaucetMsg(null), 6000);
-    setFaucetOpen(false);
   };
 
   const disconnect = () => {
@@ -203,7 +201,7 @@ export default function App() {
             ].map((n) => {
               const active = loc.pathname.startsWith(n.match);
               return (
-                <Link key={n.to} to={n.to} className="mono"
+                <Link key={n.to} to={n.to} className="mono nav-item"
                   style={{
                     display: "inline-flex", alignItems: "center", gap: 7, fontSize: "0.76rem", letterSpacing: "0.05em",
                     color: active ? "var(--lamplight)" : "var(--mist)", textDecoration: "none",
@@ -216,7 +214,7 @@ export default function App() {
             })}
             {(wallet.address || evm.address) && (
               <span style={{ position: "relative", display: "inline-flex", alignItems: "stretch" }}>
-                <button className="mono" onClick={() => setPlansOpen((o) => !o)}
+                <button className="mono nav-item" aria-expanded={plansOpen} onClick={() => setPlansOpen((o) => !o)}
                   style={{
                     display: "inline-flex", alignItems: "center", gap: 7, fontSize: "0.76rem", letterSpacing: "0.05em",
                     color: plansOpen ? "var(--lamplight)" : "var(--mist)", background: "none", border: "none", cursor: "pointer",
@@ -265,34 +263,6 @@ export default function App() {
               </span>
             )}
             <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
-              <a className="btn btn-ghost" href={CONFIG.github} target="_blank" rel="noreferrer"
-                style={{ padding: "6px 12px", fontSize: "0.72rem", whiteSpace: "nowrap" }} title="Source code & threat model">
-                GitHub ↗
-              </a>
-              <span style={{ position: "relative" }}>
-                <button className="btn btn-ghost" onClick={() => setFaucetOpen((o) => !o)}
-                  style={{ padding: "6px 12px", fontSize: "0.72rem", whiteSpace: "nowrap" }} title="Free testnet funds — pick the right ledger">
-                  Faucet ▾
-                </button>
-                {faucetOpen && (
-                  <div style={{ position: "absolute", right: 0, top: 42, background: "var(--ink-2)", border: "1px solid var(--line)", borderRadius: 12, padding: 10, width: 285, zIndex: 40, boxShadow: "0 18px 60px rgba(0,0,0,.45)" }}>
-                    <button onClick={fundXrp}
-                      style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "9px 10px", borderRadius: 8 }}>
-                      <span style={{ display: "block", color: "var(--paper)", fontSize: "0.82rem" }}>
-                        Test XRP → XRPL wallet (r…){wallet.address ? " · one click" : " ↗"}
-                      </span>
-                      <span className="mono" style={{ fontSize: "0.62rem", color: "var(--mist-2)" }}>
-                        {wallet.address ? `funds ${short(wallet.address, 6)} directly` : "for GemWallet / any r… address"}
-                      </span>
-                    </button>
-                    <a href={CONFIG.faucet} target="_blank" rel="noreferrer" onClick={() => setFaucetOpen(false)}
-                      style={{ display: "block", padding: "9px 10px", borderRadius: 8, textDecoration: "none" }}>
-                      <span style={{ display: "block", color: "var(--paper)", fontSize: "0.82rem" }}>C2FLR gas → EVM wallet (0x…) ↗</span>
-                      <span className="mono" style={{ fontSize: "0.62rem", color: "var(--mist-2)" }}>for MetaMask / OKX — XRPL addresses are rejected there</span>
-                    </a>
-                  </div>
-                )}
-              </span>
             {wallet.address || evm.address ? (
               <span style={{ position: "relative" }}>
                 <button className="pill gold" title={wallet.address ?? evm.address ?? ""} onClick={() => setAcctOpen((o) => !o)}
@@ -346,10 +316,20 @@ export default function App() {
                           )}
                         </span>
                       </div>
-                      <a className="mono" style={{ fontSize: "0.72rem" }} target="_blank" rel="noreferrer"
-                        href={wallet.address ? `${CONFIG.xrplExplorer}/accounts/${wallet.address}` : `${CONFIG.explorer}/address/${evm.address}`}>
-                        View on explorer ↗
-                      </a>
+                      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                        <a className="mono" style={{ fontSize: "0.72rem" }} target="_blank" rel="noreferrer"
+                          href={wallet.address ? `${CONFIG.xrplExplorer}/accounts/${wallet.address}` : `${CONFIG.explorer}/address/${evm.address}`}>
+                          explorer ↗
+                        </a>
+                        <a className="mono" style={{ fontSize: "0.72rem" }} target="_blank" rel="noreferrer" href={CONFIG.github}>
+                          GitHub ↗
+                        </a>
+                        {!wallet.address && (
+                          <a className="mono" style={{ fontSize: "0.72rem" }} target="_blank" rel="noreferrer" href={CONFIG.faucet}>
+                            C2FLR faucet ↗
+                          </a>
+                        )}
+                      </div>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingTop: 11, borderTop: "1px solid var(--line)" }}>
                       <button onClick={() => { setAcctOpen(false); setModalOpen(true); }}
@@ -369,6 +349,34 @@ export default function App() {
                 {connecting ? "Connecting…" : "Connect wallet"}
               </button>
             )}
+            <span style={{ position: "relative" }} className="burger-wrap">
+              <button className="btn btn-ghost burger" aria-expanded={menuOpen} aria-label="Menu"
+                onClick={() => setMenuOpen((o) => !o)} style={{ padding: "6px 11px", fontSize: "0.9rem" }}>☰</button>
+              {menuOpen && (
+                <div style={{ position: "absolute", right: 0, top: 46, background: "var(--ink-2)", border: "1px solid var(--line)", borderRadius: 12, padding: 10, width: 230, zIndex: 40, boxShadow: "0 18px 60px rgba(0,0,0,.45)" }}>
+                  {[["/case/001", "▶ Live case"], ["/create", "＋ Create a plan"]].map(([to, label]) => (
+                    <Link key={to} to={to} className="menu-row" onClick={() => setMenuOpen(false)}
+                      style={{ display: "block", padding: "9px 10px", borderRadius: 8, fontSize: "0.85rem", textDecoration: "none", color: "var(--paper)" }}>
+                      {label}
+                    </Link>
+                  ))}
+                  <a className="menu-row" href={CONFIG.github} target="_blank" rel="noreferrer"
+                    style={{ display: "block", padding: "9px 10px", borderRadius: 8, fontSize: "0.85rem", textDecoration: "none", color: "var(--mist)" }}>
+                    GitHub ↗
+                  </a>
+                  <a className="menu-row" href={CONFIG.faucet} target="_blank" rel="noreferrer"
+                    style={{ display: "block", padding: "9px 10px", borderRadius: 8, fontSize: "0.85rem", textDecoration: "none", color: "var(--mist)" }}>
+                    C2FLR faucet ↗
+                  </a>
+                  {wallet.address && (
+                    <button className="menu-row" onClick={() => { setMenuOpen(false); void fundXrp(); }}
+                      style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "9px 10px", borderRadius: 8, fontSize: "0.85rem", color: "var(--mist)" }}>
+                      Get test XRP (one click)
+                    </button>
+                  )}
+                </div>
+              )}
+            </span>
             </span>
           </nav>
         </div>

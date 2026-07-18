@@ -1,11 +1,11 @@
 {
   "id": "case-001",
-  "builtAt": "2026-07-18T01:57:43.280Z",
+  "builtAt": "2026-07-18T07:55:42.388Z",
   "network": "Flare Coston2 + XRPL Testnet",
   "truth": "Real XRPL transactions · Real FDC attestations · Real Coston2 contracts · Real XRP Testnet payout — demo identities, compressed timing",
   "vault": "0x5655FED767c4315218393c5501c3624917a9BaEB",
   "finalState": 5,
-  "verdict": "VERIFIED COMPLETE · RESIDUAL DISCLOSED",
+  "verdict": "SETTLED · RESIDUAL DISCLOSED",
   "protectedFxrp": "10.07569",
   "payoutXrp": "9.95",
   "finalFxrpBalance": "0.08",
@@ -14,11 +14,20 @@
     1398674
   ],
   "silenceRound": 1398674,
-  "redemptionIds": [],
+  "redemptionIds": [
+    "#39515410"
+  ],
+  "redemption": {
+    "requestId": "39515410",
+    "valueUBA": "10000000",
+    "feeUBA": "50000",
+    "paymentReference": "0x46425052664100020000000000000000000000000000000000000000025af512"
+  },
+  "contractVersion": "HeirloomVault v2 (this case predates the v3 EVM-owner field; v3 factory: 0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2)",
   "mintTxFlare": "0x4d3561e67407e0a7ed756293c0460b353c989a02d32843ece21ea7722f9fde74",
   "fundingTxXrpl": "7E48BC6E94DB6EB2A820D2D3F8B134EE3889F670581D18A6EBDD29B1221D4F7F",
   "heartbeatTxXrpl": "A410533D4C8038F062076B95BA3C4D7C0D81587AF28058204379AA19A80ECB11",
-  "heartbeatTxFlare": null,
+  "heartbeatTxFlare": "0x93ff5a585da0f0bf37efd8335c13db8d21c6e465293f4e1a85312c1a82a86c70",
   "heartbeatRound": null,
   "createdTxFlare": "0x9b0192501cc9e2bf2c546a3dac54dff4db386ee8e2c1e79fa16beba8a388d502",
   "claimStartTxFlare": "0x79dd4eec7b18521e7c3f481fc6e8c864647fd5580fcb61ef16eda8224bd9df59",
@@ -43,7 +52,7 @@
       "passed": true
     },
     {
-      "label": "Settlement transaction carries the redemption payment reference in its memo",
+      "label": "Settlement memo EQUALS the RedemptionRequested paymentReference (decoded from the release receipt)",
       "passed": true
     },
     {
@@ -51,7 +60,7 @@
       "passed": true
     },
     {
-      "label": "Every redeemable lot settled; remaining 0.08 FXRP is below one 10-FXRP lot (FAssets redeems whole lots) and stays visible on-chain",
+      "label": "The vault redeemed the maximum the FAssets protocol accepts; the remaining 0.08 FXRP is below the protocol redemption minimum and stays publicly visible on-chain",
       "passed": true
     },
     {
