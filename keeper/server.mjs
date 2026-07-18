@@ -117,7 +117,9 @@ function createAllowed(ip) {
   return null;
 }
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, factory: dep.factory, beacon: BEACON, at: Date.now() }));
+let BUILD_SHA = "dev";
+try { BUILD_SHA = readFileSync(new URL("../BUILD_SHA", import.meta.url), "utf8").trim(); } catch { /* dev run */ }
+app.get("/api/health", (_req, res) => res.json({ ok: true, build: BUILD_SHA, factory: dep.factory, beacon: BEACON, at: Date.now() }));
 
 // direct-mint quote: exact drops + payment address, refreshed at pay time.
 // Best-effort dynamic address (newer AssetManagers expose it); falls back to

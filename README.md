@@ -73,7 +73,7 @@ beneficiary's wallet ◀─── real XRP
 
 1. **60 seconds:** open https://heirloom.axiqo.xyz/case/001 — the **Live Case Dashboard**: one real completed
    lifecycle in seven chapters (promise → funding → heartbeat → blocked early claim → silence proof →
-   challenge → 9.95 XRP delivered), with a dual-ledger transaction rail, a reconciled payout receipt whose
+   challenge + veto-proof grace → 10.03 XRP delivered, final balance 0), with a dual-ledger transaction rail, a reconciled payout receipt whose
    five integrity checks are generated from chain data (`spike/build-case.mjs`), and a 90-second guided tour.
    No wallet, no waiting, every claim clickable to its explorer page.
 2. **5 minutes:** *Create a plan* → connect [GemWallet](https://gemwallet.app) (XRPL-native, the primary path)

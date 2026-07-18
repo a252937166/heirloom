@@ -17,8 +17,8 @@ silence plus a final veto window does real XRP reach the person they chose."
    - Chapter 2: "One ordinary XRPL payment — FAssets mints straight into the vault, no EVM wallet needed."
    - Chapter 4 (ember): "This is the attack: an early claim. The proof of absence cannot even be built —
      the verifier answers REFERENCED TRANSACTION EXISTS."
-   - Chapter 7 / 收据: "9.95 real XRP on the beneficiary's own wallet, and the receipt's five integrity
-     checks are generated from chain data — including the 0.08 FXRP residual, disclosed, not hidden."
+   - Chapter 7 / 收据: "10.03 real XRP on the beneficiary's own wallet — final balance zero — and the receipt's five integrity
+     checks are generated from chain data — SETTLED · FULLY RECONCILED."
 
 ## 5 分钟完整动线
 
