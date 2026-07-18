@@ -63,7 +63,7 @@ const HEADLINES: Record<number, { title: string; sub: string }> = {
 
 export function Vault() {
   const { address = "" } = useParams();
-  const { wallet } = useWallet();
+  const { wallet, evm, openConnect } = useWallet();
   const [v, setV] = useState<VaultView | null>(null);
   const [events, setEvents] = useState<KeeperEvent[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -94,6 +94,12 @@ export function Vault() {
     try {
       if (v.ownerEvm !== ZERO_EVM) {
         // EVM-owner plan: the check-in IS the transaction — no proof round-trip needed
+        if (!evm.address) {
+          openConnect();
+          setNote("Pick your wallet in the Connections dialog, then press the button again.");
+          setBusy(false);
+          return;
+        }
         const hash = await heartbeatEvmTx(address);
         setNote(`Checked in (${short(hash, 8)}). The dial reset instantly — consensus time is the clock.`);
         fetch(`${CONFIG.api}/vaults/${address}/heartbeat`, {
@@ -126,6 +132,12 @@ export function Vault() {
     setBusy(true); setErr(null);
     try {
       if (v && v.ownerEvm !== ZERO_EVM) {
+        if (!evm.address) {
+          openConnect();
+          setNote("Pick your wallet in the Connections dialog, then press cancel again.");
+          setBusy(false);
+          return;
+        }
         const hash = await cancelEvmTx(address);
         setNote(`Plan cancelled (${short(hash, 8)}). The vault handed all FXRP back to your wallet.`);
         setCancelOpen(false);
