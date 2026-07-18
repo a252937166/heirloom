@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/brand/heirloom-logo-full.png" alt="Heirloom — continuity vault for XRP" width="520" /></p>
+
 # Heirloom — the continuity vault for XRP
 
 > **If you go silent, your XRP reaches the person you chose — proven by Flare consensus, never by a company.**
@@ -26,29 +28,28 @@ Heartbeats are XRPL payments carrying the vault's 32-byte reference — but sile
 **2. The beneficiary cannot come early.**
 The claim window is anchored to ledger numbers: it must start exactly at `lastHeartbeatLedger + 1` and cover the whole inactivity period as an unbroken chain of attestations. While the owner is alive the proof is unproducible; after real silence, a challenge window still lets one heartbeat cancel everything (`ClaimVetoed`).
 
-## The canonical case — settled and reconciled (Case #001)
+## The canonical case — settled and fully reconciled (Case #001, contract v4)
 
-One real lifecycle, presented at [/case/001](https://heirloom.axiqo.xyz/case/001) with a machine-generated,
-chain-verified manifest (`spike/build-case.mjs` → `web/src/case-001.json`; regenerate any time):
+One real lifecycle on the CURRENT deployed contracts, presented at [/case/001](https://heirloom.axiqo.xyz/case/001)
+with a machine-generated, chain-verified manifest (`spike/build-case.mjs` → `web/src/case-001.json`):
 
 | fact | value |
 |---|---|
-| Vault (v2 semantics) | [`0x5655FED7…`](https://coston2-explorer.flare.network/address/0x5655FED767c4315218393c5501c3624917a9BaEB) |
+| Vault (v4, veto proof grace live) | [`0x35975770…`](https://coston2-explorer.flare.network/address/0x35975770e1eD5431e0bFCaBB238B6188c94AeAdA) |
 | Protected | **10.07569 FXRP** (one XRPL payment, direct-minted) |
-| Redeemed | 10.00 FXRP — redemption request `#39515410` decoded from the release receipt |
-| Delivered | **9.95 XRP** on the beneficiary's own wallet — settlement memo **equals** `RedemptionRequested.paymentReference`, byte for byte |
-| Residual | **0.08 FXRP** — below the protocol redemption minimum, disclosed on-chain, never hidden |
-| Verdict | `SETTLED · RESIDUAL DISCLOSED` — five integrity checks, all generated from public data |
-
-An early release attempt seven seconds before the challenge ended was rejected on-chain with `ChallengeNotOver` — the safety mechanics defending even against their own operator.
+| Early-claim drill | blocked on-chain via staticCall — `SilenceNotProven`, funds moved 0 (recorded in the journal) |
+| Release timing | waited out challenge **+ 120s** challenge, then the 180s veto-proof grace — the XRPL timestamp decides a veto, never transaction ordering |
+| Redeemed | 10.07569 FXRP — the FULL balance, request `#39635850` decoded from the release receipt |
+| Delivered | **10.03 XRP** on the beneficiary's own wallet — settlement memo **equals** `RedemptionRequested.paymentReference`, byte for byte |
+| Final balance | **0 FXRP — fully reconciled** |
+| Verdict | `SETTLED · FULLY RECONCILED` — five integrity checks, all generated from public data |
 
 <details>
-<summary>Historical experiment (first full run, pre-v2 redemption semantics)</summary>
+<summary>Provenance: earlier full runs (v1 lot-redemption era and the v2 residual case)</summary>
 
-The very first lifecycle ran on the v1 contract with lot-based redemption (vault `0x22d820…8826`):
-19.96 FXRP minted → one 10-FXRP lot redeemed → 9.95 XRP delivered (tx `7452922B…754B`). That gap is exactly
-why v2 switched to full-balance `redeemAmount` with honest residual disclosure — kept as provenance, not as
-the showcase.
+Run 1 (v1, lot redemption): 19.96 FXRP minted → one 10-FXRP lot redeemed → 9.95 XRP (tx `7452922B…754B`).
+Run 2 (v2, `redeemAmount`): 10.08 FXRP → 9.95 XRP + 0.08 residual disclosed (vault `0x5655FED7…BaeB`).
+Each gap drove the next contract revision — kept as provenance, not as the showcase.
 </details>
 
 ## How Flare is load-bearing (remove any piece and the product collapses)

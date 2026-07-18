@@ -299,7 +299,9 @@ export function CaseStudy() {
           <span className="mono" style={{ fontSize: "0.7rem", color: "var(--mist)" }}>heartbeat proofs <strong style={{ color: "var(--paper)" }}>{m.heartbeatEpochs}</strong></span>
           <span className="mono" style={{ fontSize: "0.7rem", color: "var(--mist)" }}>FDC round <strong style={{ color: "var(--paper)" }}>{m.silenceRound ?? "—"}</strong></span>
           <span className="mono" style={{ fontSize: "0.7rem", color: "var(--mist-2)" }}>
-            the protocol maximum was redeemed; the remainder is below the redemption minimum and disclosed{liveBalance ? ` · live: ${liveBalance} FXRP` : ""}
+            {residual
+              ? `the protocol maximum was redeemed; the remainder is below the redemption minimum and disclosed`
+              : "the full balance was redeemed — reconciled to zero"}{liveBalance ? ` · live: ${liveBalance} FXRP` : ""}
           </span>
         </div>
       </section>

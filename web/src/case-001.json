@@ -1,49 +1,50 @@
 {
   "id": "case-001",
-  "builtAt": "2026-07-18T07:55:42.388Z",
+  "builtAt": "2026-07-18T10:25:31.919Z",
   "network": "Flare Coston2 + XRPL Testnet",
   "truth": "Real XRPL transactions · Real FDC attestations · Real Coston2 contracts · Real XRP Testnet payout — demo identities, compressed timing",
-  "vault": "0x5655FED767c4315218393c5501c3624917a9BaEB",
+  "vault": "0x35975770e1eD5431e0bFCaBB238B6188c94AeAdA",
   "finalState": 5,
-  "verdict": "SETTLED · RESIDUAL DISCLOSED",
+  "verdict": "SETTLED · FULLY RECONCILED",
   "protectedFxrp": "10.07569",
-  "payoutXrp": "9.95",
-  "finalFxrpBalance": "0.08",
+  "payoutXrp": "10.03",
+  "finalFxrpBalance": "0",
   "heartbeatEpochs": 1,
   "fdcRounds": [
-    1398674
+    1399320,
+    1399326
   ],
-  "silenceRound": 1398674,
+  "silenceRound": 1399326,
   "redemptionIds": [
-    "#39515410"
+    "#39635850"
   ],
   "redemption": {
-    "requestId": "39515410",
-    "valueUBA": "10000000",
-    "feeUBA": "50000",
-    "paymentReference": "0x46425052664100020000000000000000000000000000000000000000025af512"
+    "requestId": "39635850",
+    "valueUBA": "10075690",
+    "feeUBA": "50378",
+    "paymentReference": "0x46425052664100020000000000000000000000000000000000000000025ccb8a"
   },
-  "contractVersion": "HeirloomVault v2 (this case predates the v3 EVM-owner field; v3 factory: 0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2)",
-  "mintTxFlare": "0x4d3561e67407e0a7ed756293c0460b353c989a02d32843ece21ea7722f9fde74",
-  "fundingTxXrpl": "7E48BC6E94DB6EB2A820D2D3F8B134EE3889F670581D18A6EBDD29B1221D4F7F",
-  "heartbeatTxXrpl": "A410533D4C8038F062076B95BA3C4D7C0D81587AF28058204379AA19A80ECB11",
-  "heartbeatTxFlare": "0x93ff5a585da0f0bf37efd8335c13db8d21c6e465293f4e1a85312c1a82a86c70",
-  "heartbeatRound": null,
-  "createdTxFlare": "0x9b0192501cc9e2bf2c546a3dac54dff4db386ee8e2c1e79fa16beba8a388d502",
-  "claimStartTxFlare": "0x79dd4eec7b18521e7c3f481fc6e8c864647fd5580fcb61ef16eda8224bd9df59",
-  "silenceTxFlare": "0x6f89bcd7e9050fa09485bbe905f3b353d32d9697eb319f845c8e742713ee59da",
-  "redeemedFxrp": "10",
+  "contractVersion": "HeirloomVault v4 (veto proof grace 180s; factory 0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f)",
+  "mintTxFlare": "0x0a4a0f4ed38c15484e926ce1da9eac57a0807d64f479ce9ba15a79a52df13825",
+  "fundingTxXrpl": "32746026FB0399FFFABF008EECFA2306608114ABC958FB8D8B6DE3575BF6C4C3",
+  "heartbeatTxXrpl": "08F58E39A35587E614A4B39F101C93307C82D26DF3A248517B2C45AAE17EB1A1",
+  "heartbeatTxFlare": "0xcdd1339ae0661d4514ae5661718a87cc673d231bae8cc85fc512ba1d7b6e7e2e",
+  "heartbeatRound": 1399320,
+  "createdTxFlare": "0x6d7fbcc00f6ca1625826d8a413ad2831d9675e2cc18f6a9e38eaa8f08174ecd4",
+  "claimStartTxFlare": "0xcf982f10903860a5d49bcac0d96129fdad10ae6d88065f5f469d4e4012e6bc40",
+  "silenceTxFlare": "0x4dee6308e74d79f07d4eb709009001ffdbc6cda387e22d9fbc4db4f6d6155bcf",
+  "redeemedFxrp": "10.07569",
   "settlement": {
-    "hash": "F1B2764CD5CAEC1E153E5C6C74539CCD65095AA5B0AA0232E3A57205B6584360",
+    "hash": "62367A2025E6EF28F0D2FFF4073838B21508323E2E4EBCE45A6774A763FFBE7A",
     "destination": "rKZo43bi3Vt5ba9gKzUbzMGx4tXV9NUXpq",
-    "amountDrops": "9950000",
-    "memoHex": "46425052664100020000000000000000000000000000000000000000025AF512",
-    "ledger": 19148200
+    "amountDrops": "10025312",
+    "memoHex": "46425052664100020000000000000000000000000000000000000000025CCB8A",
+    "ledger": 19166729
   },
-  "releaseTxFlare": "0xa7ae82aa9cd7d9e30300e1ffa6ac18e21b5675dff51150665c759d039613e031",
+  "releaseTxFlare": "0x39f055c0b07c02daff7e364283e79d98b3d1d58d84069d45a8e72f9e8d83e744",
   "challenge": {
-    "startedAt": 1784310826,
-    "endedAt": 1784310946
+    "startedAt": 1784369514,
+    "endedAt": 1784369634
   },
   "residualNote": null,
   "integrityChecks": [
@@ -60,7 +61,7 @@
       "passed": true
     },
     {
-      "label": "The vault redeemed the maximum the FAssets protocol accepts; the remaining 0.08 FXRP is below the protocol redemption minimum and stays publicly visible on-chain",
+      "label": "Final vault FXRP balance is zero — fully reconciled",
       "passed": true
     },
     {
