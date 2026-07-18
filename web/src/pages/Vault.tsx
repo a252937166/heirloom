@@ -170,7 +170,18 @@ export function Vault() {
   const headSub = v.state === 6 && isEvmPlan ? "The vault handed all FXRP back to your connected wallet." : head.sub;
 
   return (
-    <main className="wrap" style={{ padding: "44px 24px" }}>
+    <main className="wrap side-layout" style={{ paddingTop: 34, paddingBottom: 40 }}>
+      <nav className="sidenav no-print" aria-label="Vault sections">
+        <span className="mono" style={{ fontSize: "0.62rem", color: "var(--mist-2)", letterSpacing: "0.12em", padding: "4px 12px 8px" }}>MY VAULT</span>
+        <a href="#overview" className="active">▦ Overview</a>
+        <a href="#activity">≡ Activity</a>
+        <Link to={`/kit/${address}`}>⛨ Recovery Kit</Link>
+        <Link to={`/claim/${address}`}>⇄ Beneficiary view</Link>
+        {v.state >= 1 && v.state <= 3 && (
+          <button onClick={openCancel} style={{ color: "var(--ember)" }}>✕ Cancel plan</button>
+        )}
+      </nav>
+      <div style={{ minWidth: 0 }} id="overview">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10 }}>
         <div>
           <div className="eyebrow">Continuity plan</div>
@@ -183,11 +194,49 @@ export function Vault() {
       {err && <div className="notice err" style={{ margin: "16px 0" }}>{err}</div>}
       {note && <div className="notice ok" style={{ margin: "16px 0" }}>{note}</div>}
 
+      {v.state === 3 && (
+        <div className="alert-warn" style={{ margin: "18px 0" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "baseline", marginBottom: 14, flexWrap: "wrap" }}>
+            <span style={{ color: "var(--ember)", fontSize: "1rem" }}>⚠</span>
+            <span style={{ color: "var(--paper)", fontWeight: 600, fontSize: "0.95rem" }}>A claim has been started by the beneficiary.</span>
+            <span style={{ color: "var(--mist)", fontSize: "0.85rem" }}>One heartbeat from you cancels it.</span>
+          </div>
+          <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
+            <div>
+              <div className="mono" style={{ fontSize: "0.62rem", color: "var(--mist-2)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Veto window ends in</div>
+              <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "2.1rem", color: "var(--ember)", lineHeight: 1.1 }}>
+                {Math.max(0, v.claimChallengeEndsAt - now) >= 60
+                  ? `${Math.floor(Math.max(0, v.claimChallengeEndsAt - now) / 60)}m ${Math.max(0, v.claimChallengeEndsAt - now) % 60}s`
+                  : `${Math.max(0, v.claimChallengeEndsAt - now)}s`}
+              </div>
+            </div>
+            <div>
+              <div className="mono" style={{ fontSize: "0.62rem", color: "var(--mist-2)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Claim started</div>
+              <div style={{ fontSize: "0.95rem", color: "var(--paper)", fontWeight: 600 }}>
+                {Math.max(0, now - (v.claimChallengeEndsAt - v.challengePeriod)) < 120
+                  ? `${Math.max(0, now - (v.claimChallengeEndsAt - v.challengePeriod))}s ago`
+                  : `${Math.floor(Math.max(0, now - (v.claimChallengeEndsAt - v.challengePeriod)) / 60)}m ago`}
+              </div>
+              <div className="mono" style={{ fontSize: "0.64rem", color: "var(--mist-2)" }}>reason: silence period proven</div>
+            </div>
+            <div style={{ marginLeft: "auto" }}>
+              <PulseDial size={92} lastAliveTs={v.claimChallengeEndsAt - v.challengePeriod} deadlineTs={v.claimChallengeEndsAt} state={3} label="pulse" />
+            </div>
+          </div>
+          <button className="btn btn-warn" disabled={busy} onClick={heartbeat} style={{ marginTop: 16, width: "100%", padding: "13px 0", fontSize: "1rem" }}>
+            {busy ? "Confirm in wallet…" : "Veto the claim — I'm here"}
+          </button>
+          <p className="mono" style={{ fontSize: "0.66rem", color: "var(--mist-2)", marginTop: 8, textAlign: "center" }}>
+            {isEvmPlan ? "one click — the transaction timestamp cancels and resets" : "send one payment to cancel and reset"}
+          </p>
+        </div>
+      )}
+
       <div className="two-col" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 36, marginTop: 26, alignItems: "start" }}>
         <div style={{ textAlign: "center" }}>
           <PulseDial lastAliveTs={v.lastHeartbeatTs} deadlineTs={v.state === 3 ? v.claimChallengeEndsAt : v.silenceDeadline} state={v.state}
             label={v.state === 1 ? "waiting for funding" : v.state === 3 ? "challenge — one heartbeat vetoes" : undefined} />
-          {v.state <= 3 && (
+          {v.state <= 2 && (
             <div style={{ marginTop: 18, display: "grid", gap: 10, justifyItems: "center" }}>
               <button className="btn btn-primary" disabled={busy || (!isEvmPlan && !wallet.address)} onClick={heartbeat}>
                 {busy ? "Confirm in wallet…" : v.state === 3 ? "Veto the claim — I'm here" : dueSoon ? "Check in now" : isEvmPlan ? "I'm here — check in" : "I'm here — send heartbeat"}
@@ -225,23 +274,15 @@ export function Vault() {
               : <span style={{ color: "var(--ember)" }}>⚠ connected account is NOT this plan's owner</span>)}
           </div>
 
-          <div className="card" style={{ marginTop: 20 }}>
+          <div className="card" style={{ marginTop: 20 }} id="activity">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <h3>The plan's journey</h3>
+              <h3>Activity — the plan's journey</h3>
               <span className="mono" style={{ fontSize: "0.68rem", color: "var(--mist-2)" }}>every entry is a public transaction</span>
             </div>
             <EvidenceTimeline events={events} journey />
           </div>
 
-          <div style={{ display: "flex", gap: 12, marginTop: 20, flexWrap: "wrap" }}>
-            <Link className="btn btn-ghost" to={`/kit/${address}`}>Recovery Kit (print)</Link>
-            <Link className="btn btn-ghost" to={`/claim/${address}`}>Beneficiary view</Link>
-            {v.state >= 1 && v.state <= 3 && (
-              <button className="btn btn-ghost" style={{ color: "var(--ember)", borderColor: "color-mix(in srgb, var(--ember) 40%, transparent)" }} onClick={openCancel}>
-                Cancel plan & redeem back to me
-              </button>
-            )}
-          </div>
+
 
           {cancelOpen && (
             <div className="card" style={{ marginTop: 16, borderColor: "color-mix(in srgb, var(--ember) 45%, transparent)" }}>
@@ -299,6 +340,7 @@ export function Vault() {
             </div>
           </details>
         </div>
+      </div>
       </div>
     </main>
   );

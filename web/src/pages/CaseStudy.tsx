@@ -8,6 +8,7 @@ import { CONFIG } from "../config";
 import { PulseDial } from "../components/PulseDial";
 import { VaultView, readVault, fmtFxrp } from "../lib/chain";
 import { EvidenceTimeline, KeeperEvent } from "./Vault";
+import { NodeStepper } from "../components/NodeStepper";
 import manifest from "../case-001.json";
 
 type Ev = { chain: "XRPL" | "Flare" | "Rule"; label: string; hash?: string | null; url?: string; extra?: string };
@@ -26,6 +27,9 @@ interface Chapter {
 }
 
 const m = manifest;
+const CHAPTER_ICON: Record<string, string> = {
+  promise: "✍", funded: "⇄", heartbeat: "♥", "early-claim": "✕", silence: "◎", challenge: "⏳", payout: "✓",
+};
 const CHAPTER_SHORT: Record<string, string> = {
   promise: "Promise", funded: "Funded", heartbeat: "Heartbeat", "early-claim": "Blocked",
   silence: "Silence", challenge: "Challenge", payout: "Payout",
@@ -225,6 +229,10 @@ export function CaseStudy() {
   ];
   const checksAllPass = useMemo(() => m.integrityChecks.every((c) => c.passed), []);
 
+  const NAV = [
+    ["#overview", "▦", "Overview"], ["#story", "◈", "7-Step Story"], ["#audit", "⇄", "Dual-Ledger"],
+    ["#attacks", "✕", "Attacks"], ["#receipt", "✓", "Receipt"], ["#evidence", "≡", "Evidence Log"],
+  ] as const;
   return (
     <main style={{ paddingBottom: 60 }}>
       {tour && (
@@ -240,8 +248,16 @@ export function CaseStudy() {
         </div>
       )}
 
+      <div className="wrap side-layout" style={{ paddingTop: 30 }}>
+        <nav className="sidenav no-print" aria-label="Case sections">
+          <span className="mono" style={{ fontSize: "0.62rem", color: "var(--mist-2)", letterSpacing: "0.12em", padding: "4px 12px 8px" }}>CASE #001</span>
+          {NAV.map(([href, ic, label]) => (
+            <a key={href} href={href}><span style={{ opacity: 0.7 }}>{ic}</span>{label}</a>
+          ))}
+        </nav>
+        <div style={{ minWidth: 0 }}>
       {/* ── hero: the conclusion first ─────────────────────────────────── */}
-      <section className="wrap" style={{ padding: "44px 24px 10px" }}>
+      <section id="overview" style={{ padding: "10px 0 10px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <span className="pill gold">REAL TESTNET CASE</span>
@@ -271,30 +287,25 @@ export function CaseStudy() {
           </a>
         </div>
 
-        <div className="status-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
-          {statusCards.map(([k, val]) => (
-            <div className="stat" key={k}>
-              <div className="k">{k}</div>
-              <div className="v" style={{ color: val === "Blocked" ? "var(--ember)" : "var(--verdant)" }}>{val}</div>
-            </div>
-          ))}
+        <div className="status-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+          <div className="stat"><div className="k">Protected</div><div className="v">{m.protectedFxrp} <span style={{ fontSize: "0.7rem", color: "var(--mist-2)" }}>FXRP</span></div></div>
+          <div className="stat"><div className="k">Delivered</div><div className="v" style={{ color: "var(--verdant)" }}>{m.payoutXrp} <span style={{ fontSize: "0.7rem", color: "var(--mist-2)" }}>XRP</span></div></div>
+          <div className="stat"><div className="k">Early claim</div><div className="v" style={{ color: "var(--ember)" }}>Blocked</div></div>
+          <div className="stat"><div className="k">Silence proof</div><div className="v" style={{ color: "var(--verdant)" }}>Verified</div></div>
+          <div className="stat"><div className="k">Challenge</div><div className="v" style={{ color: "var(--verdant)" }}>Passed</div></div>
+          <div className="stat"><div className="k">Final balance</div><div className="v" style={{ color: "var(--lamplight-strong)" }}>{m.finalFxrpBalance} <span style={{ fontSize: "0.7rem", color: "var(--mist-2)" }}>FXRP</span></div></div>
         </div>
-        <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginTop: 12, padding: "10px 4px", borderBottom: "1px solid var(--line)" }}>
-          {dataRow.map(([k, val, warn]) => (
-            <span key={k} className="mono" style={{ fontSize: "0.74rem", color: "var(--mist)" }}>
-              {k} <strong style={{ color: warn ? "var(--lamplight)" : "var(--paper)" }}>{val}</strong>
-            </span>
-          ))}
-          {residual && (
-            <span className="mono" style={{ fontSize: "0.72rem", color: "var(--mist-2)" }}>
-              — the protocol maximum was redeemed; the remainder is below the redemption minimum and disclosed{liveBalance ? ` · live: ${liveBalance} FXRP` : ""}
-            </span>
-          )}
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 10, padding: "8px 2px", borderBottom: "1px solid var(--line)" }}>
+          <span className="mono" style={{ fontSize: "0.7rem", color: "var(--mist)" }}>heartbeat proofs <strong style={{ color: "var(--paper)" }}>{m.heartbeatEpochs}</strong></span>
+          <span className="mono" style={{ fontSize: "0.7rem", color: "var(--mist)" }}>FDC round <strong style={{ color: "var(--paper)" }}>{m.silenceRound ?? "—"}</strong></span>
+          <span className="mono" style={{ fontSize: "0.7rem", color: "var(--mist-2)" }}>
+            the protocol maximum was redeemed; the remainder is below the redemption minimum and disclosed{liveBalance ? ` · live: ${liveBalance} FXRP` : ""}
+          </span>
         </div>
       </section>
 
       {/* ── the seven-chapter player ───────────────────────────────────── */}
-      <section className="wrap" style={{ padding: "30px 24px" }} ref={playerRef}>
+      <section id="story" style={{ padding: "26px 0" }} ref={playerRef}>
         <div className="card" style={{ padding: 0, overflow: "hidden", borderColor: ch.ember ? "color-mix(in srgb, var(--ember) 35%, transparent)" : undefined }}>
           <div className="two-col" style={{ display: "grid", gridTemplateColumns: "290px 1fr" }}>
             <div style={{ padding: "32px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, borderRight: "1px solid var(--line)" }}>
@@ -303,18 +314,13 @@ export function CaseStudy() {
               <span className="mono" style={{ fontSize: "0.66rem", color: "var(--mist-2)" }}>chapter {ch.n} of 7</span>
             </div>
             <div style={{ padding: "26px 30px" }}>
-              <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-                {CHAPTERS.map((c, i) => (
-                  <button key={c.id} onClick={() => go(i)} className="pill"
-                    style={{
-                      cursor: "pointer",
-                      background: i === idx ? `color-mix(in srgb, ${c.ember ? "var(--ember)" : "var(--lamplight)"} 16%, transparent)` : "transparent",
-                      color: i === idx ? (c.ember ? "var(--ember)" : "var(--lamplight)") : "var(--mist-2)",
-                      borderColor: i === idx ? `color-mix(in srgb, ${c.ember ? "var(--ember)" : "var(--lamplight)"} 50%, transparent)` : "var(--line)",
-                    }}>
-                    {c.n} <span className="chapter-label">{CHAPTER_SHORT[c.id]}</span>
-                  </button>
-                ))}
+              <div style={{ marginBottom: 18 }}>
+                <NodeStepper size={34} items={CHAPTERS.map((c, i) => ({
+                  icon: CHAPTER_ICON[c.id],
+                  label: CHAPTER_SHORT[c.id],
+                  state: (i === idx ? "active" : c.ember ? "fail" : "done") as "active" | "fail" | "done",
+                  onClick: () => go(i),
+                }))} />
               </div>
               <h3 style={{ fontFamily: "var(--font-display)", fontSize: "1.45rem", marginBottom: 10 }}>
                 <span style={{ color: accent }}>{ch.n}</span> — {ch.title}
@@ -356,52 +362,47 @@ export function CaseStudy() {
       </section>
 
       {/* ── dual-ledger rail ───────────────────────────────────────────── */}
-      <section className="wrap" style={{ padding: "20px 24px" }} id="audit">
+      <section style={{ padding: "16px 0" }} id="audit">
         <div className="eyebrow">Two ledgers, one plan</div>
         <h2 style={{ margin: "10px 0 4px", fontSize: "1.5rem" }}>The transaction rail</h2>
         <p style={{ fontSize: "0.88rem", marginBottom: 16, maxWidth: 640 }}>
           Users act on XRPL. Flare proves the facts and enforces the rules. Click any node — its counterpart
           on the other ledger lights up.
         </p>
-        <div className="card" style={{ overflowX: "auto" }}>
-          {[["XRP Ledger — where the owner and beneficiary act", RAIL_XRPL], ["Flare — where facts are proven and rules are enforced", RAIL_FLARE]].map(([title, nodes], row) => (
-            <div key={row} style={{ marginBottom: row === 0 ? 18 : 0 }}>
-              <div className="mono" style={{ fontSize: "0.66rem", color: "var(--mist-2)", marginBottom: 8 }}>{title as string}</div>
-              <div className="rail-row" style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 560 }}>
-                {(nodes as typeof RAIL_XRPL).map((nd, i) => {
-                  const active = railSel !== null && (nd.id === railSel || nd.pair === railSel);
-                  return (
-                    <span key={nd.id} style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-                      {i > 0 && <span className="rail-sep" style={{ flex: 1, height: 1, background: "var(--line)" }} />}
-                      <button onClick={() => setRailSel(railSel === nd.id ? null : nd.id)} disabled={!nd.hash}
-                        className="pill"
-                        style={{
-                          cursor: nd.hash ? "pointer" : "default", whiteSpace: "nowrap", fontSize: "0.7rem",
-                          opacity: nd.hash ? 1 : 0.45,
-                          background: active ? "color-mix(in srgb, var(--lamplight) 18%, transparent)" : "transparent",
-                          color: active ? "var(--lamplight)" : row === 0 ? "var(--verdant)" : "var(--mist)",
-                          borderColor: active ? "color-mix(in srgb, var(--lamplight) 55%, transparent)" : "var(--line)",
-                        }}>
-                        {nd.label}
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
+        <div style={{ display: "grid", gap: 14 }}>
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
+              <h3>XRPL Ledger</h3><span className="mono" style={{ fontSize: "0.64rem", color: "var(--mist-2)" }}>people & payments</span>
             </div>
-          ))}
-          {railSel && (
-            <div className="notice" style={{ marginTop: 16, fontSize: "0.82rem", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
-              <span>{RAIL_NOTES[railSel]}</span>
-              {[...RAIL_XRPL, ...RAIL_FLARE].filter((nd) => nd.id === railSel || nd.pair === railSel).map((nd) =>
-                nd.url ? <a key={nd.id} className="mono" style={{ fontSize: "0.7rem" }} href={nd.url} target="_blank" rel="noreferrer">{nd.label} ↗</a> : null)}
+            <NodeStepper size={38} items={[
+              { icon: "⇄", label: "Funding", sub: "payment", state: "done", onClick: () => window.open(xrplTx(m.fundingTxXrpl), "_blank") },
+              { icon: "♥", label: "Heartbeat", sub: "payment", state: "done", onClick: () => window.open(xrplTx(m.heartbeatTxXrpl), "_blank") },
+              { label: "(Copycat)", sub: "ignored", state: "fail" },
+              { icon: "✓", label: "Payout", sub: "to Maya", state: "done", onClick: m.settlement?.hash ? () => window.open(xrplTx(m.settlement!.hash), "_blank") : undefined },
+            ]} />
+          </div>
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
+              <h3>Flare Ledger</h3><span className="mono" style={{ fontSize: "0.64rem", color: "var(--mist-2)" }}>proofs & execution</span>
             </div>
-          )}
+            <NodeStepper size={38} items={[
+              { icon: "▢", label: "Vault", sub: "created", state: "done", onClick: m.createdTxFlare ? () => window.open(flareTx(m.createdTxFlare), "_blank") : undefined },
+              { icon: "◈", label: "FXRP", sub: "minted", state: "done", onClick: m.mintTxFlare ? () => window.open(flareTx(m.mintTxFlare), "_blank") : undefined },
+              { icon: "♥", label: "Heartbeat", sub: "recorded", state: "done", onClick: m.heartbeatTxFlare ? () => window.open(flareTx(m.heartbeatTxFlare), "_blank") : undefined },
+              { label: "Early claim", sub: "rejected", state: "fail" },
+              { icon: "◎", label: "Silence", sub: "proven", state: "done", onClick: m.silenceTxFlare ? () => window.open(flareTx(m.silenceTxFlare), "_blank") : undefined },
+              { icon: "⏳", label: "Claim", sub: "started", state: "done", onClick: m.claimStartTxFlare ? () => window.open(flareTx(m.claimStartTxFlare), "_blank") : undefined },
+              { icon: "⇄", label: "Release", sub: "executed", state: "done", onClick: m.releaseTxFlare ? () => window.open(flareTx(m.releaseTxFlare), "_blank") : undefined },
+            ]} />
+          </div>
+          <p className="mono" style={{ fontSize: "0.64rem", color: "var(--mist-2)" }}>
+            click any node to open its transaction · user action → network proof → contract effect → user result
+          </p>
         </div>
       </section>
 
       {/* ── the two attacks ────────────────────────────────────────────── */}
-      <section className="wrap" style={{ padding: "24px 24px" }}>
+      <section id="attacks" style={{ padding: "18px 0" }}>
         <div className="eyebrow">The conflicts in the story</div>
         <h2 style={{ margin: "10px 0 14px", fontSize: "1.5rem" }}>Two attacks, survived</h2>
         <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
@@ -449,7 +450,7 @@ export function CaseStudy() {
       </section>
 
       {/* ── final payout receipt ───────────────────────────────────────── */}
-      <section className="wrap" style={{ padding: "24px 24px" }}>
+      <section id="receipt" style={{ padding: "18px 0" }}>
         <div className="card" style={{ borderColor: "color-mix(in srgb, var(--verdant) 50%, transparent)", padding: 30 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10 }}>
             <h2 style={{ fontSize: "1.5rem" }}>Final payout receipt</h2>
@@ -510,7 +511,7 @@ export function CaseStudy() {
       </section>
 
       {/* ── full chronological log ─────────────────────────────────────── */}
-      <section className="wrap" style={{ padding: "10px 24px" }}>
+      <section id="evidence" style={{ padding: "10px 0" }}>
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
             <h3>Full chronological evidence log</h3>
@@ -520,7 +521,7 @@ export function CaseStudy() {
         </div>
       </section>
 
-      <section className="wrap" style={{ padding: "26px 24px", textAlign: "center" }}>
+      <section style={{ padding: "26px 0", textAlign: "center" }}>
         <p style={{ fontFamily: "var(--font-display)", fontSize: "1.35rem", color: "var(--paper)", marginBottom: 18 }}>
           The promise completed — <em style={{ color: "var(--lamplight)" }}>and every step is public.</em>
         </p>
@@ -530,6 +531,8 @@ export function CaseStudy() {
           <Link className="btn btn-ghost" to={`/kit/${m.vault}`}>See its Recovery Kit</Link>
         </div>
       </section>
+        </div>
+      </div>
     </main>
   );
 }
