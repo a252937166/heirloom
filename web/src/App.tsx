@@ -7,7 +7,7 @@ import { Claim } from "./pages/Claim";
 import { Kit } from "./pages/Kit";
 import { CaseStudy } from "./pages/CaseStudy";
 import { WalletModal } from "./components/WalletModal";
-import { WalletState, connectWallet, xrpBalance } from "./lib/gem";
+import { WalletState, connectWallet, fundTestXrp, xrpBalance } from "./lib/gem";
 import { EVM_NONE, EvmState, WalletOption, connectWith, disconnectEvm, retrySwitch } from "./lib/evm";
 import { CONFIG } from "./config";
 import { c2Balance, short, vaultsOfOwner } from "./lib/chain";
@@ -40,6 +40,8 @@ export default function App() {
   const [acctOpen, setAcctOpen] = useState(false);
   const [acctBal, setAcctBal] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [faucetOpen, setFaucetOpen] = useState(false);
+  const [faucetMsg, setFaucetMsg] = useState<string | null>(null);
   const loc = useLocation();
 
   // account panel: balance is read from the chain itself, not trusted from the wallet
@@ -112,6 +114,21 @@ export default function App() {
     }
   };
 
+  // XRPL wallets need test XRP (not C2FLR — that's for 0x addresses only).
+  // With GemWallet connected we fund the address directly via the official faucet.
+  const fundXrp = async () => {
+    if (!wallet.address) {
+      window.open("https://xrpl.org/resources/dev-tools/xrp-faucets", "_blank");
+      setFaucetOpen(false);
+      return;
+    }
+    setFaucetMsg("requesting…");
+    const ok = await fundTestXrp(wallet.address);
+    setFaucetMsg(ok ? "Test XRP requested — it lands on your wallet in a few seconds." : "Faucet unreachable — try xrpl.org/resources/dev-tools/xrp-faucets.");
+    setTimeout(() => setFaucetMsg(null), 6000);
+    setFaucetOpen(false);
+  };
+
   const disconnect = () => {
     setWallet((w) => ({ installed: w.installed, address: null, network: null }));
     setEvm(EVM_NONE);
@@ -176,10 +193,30 @@ export default function App() {
                 style={{ padding: "6px 12px", fontSize: "0.72rem" }} title="Source code & threat model">
                 GitHub ↗
               </a>
-              <a className="btn btn-ghost" href={CONFIG.faucet} target="_blank" rel="noreferrer"
-                style={{ padding: "6px 12px", fontSize: "0.72rem" }} title="Free Coston2 test gas">
-                Faucet ↗
-              </a>
+              <span style={{ position: "relative" }}>
+                <button className="btn btn-ghost" onClick={() => setFaucetOpen((o) => !o)}
+                  style={{ padding: "6px 12px", fontSize: "0.72rem" }} title="Free testnet funds — pick the right ledger">
+                  Faucet ▾
+                </button>
+                {faucetOpen && (
+                  <div style={{ position: "absolute", right: 0, top: 42, background: "var(--ink-2)", border: "1px solid var(--line)", borderRadius: 12, padding: 10, width: 285, zIndex: 40, boxShadow: "0 18px 60px rgba(0,0,0,.45)" }}>
+                    <button onClick={fundXrp}
+                      style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "9px 10px", borderRadius: 8 }}>
+                      <span style={{ display: "block", color: "var(--paper)", fontSize: "0.82rem" }}>
+                        Test XRP → XRPL wallet (r…){wallet.address ? " · one click" : " ↗"}
+                      </span>
+                      <span className="mono" style={{ fontSize: "0.62rem", color: "var(--mist-2)" }}>
+                        {wallet.address ? `funds ${short(wallet.address, 6)} directly` : "for GemWallet / any r… address"}
+                      </span>
+                    </button>
+                    <a href={CONFIG.faucet} target="_blank" rel="noreferrer" onClick={() => setFaucetOpen(false)}
+                      style={{ display: "block", padding: "9px 10px", borderRadius: 8, textDecoration: "none" }}>
+                      <span style={{ display: "block", color: "var(--paper)", fontSize: "0.82rem" }}>C2FLR gas → EVM wallet (0x…) ↗</span>
+                      <span className="mono" style={{ fontSize: "0.62rem", color: "var(--mist-2)" }}>for MetaMask / OKX — XRPL addresses are rejected there</span>
+                    </a>
+                  </div>
+                )}
+              </span>
             {wallet.address || evm.address ? (
               <span style={{ position: "relative" }}>
                 <button className="pill gold" title={wallet.address ?? evm.address ?? ""} onClick={() => setAcctOpen((o) => !o)}
@@ -225,8 +262,11 @@ export default function App() {
                         <span style={{ color: "var(--mist-2)" }}>Balance</span>
                         <span className="mono" style={{ color: "var(--paper)" }}>
                           {acctBal ?? "…"} {wallet.address ? "XRP" : "C2FLR"}
+                          {wallet.address && (
+                            <> · <button onClick={fundXrp} className="mono" style={{ background: "none", border: "none", color: "var(--lamplight)", cursor: "pointer", fontSize: "0.7rem", padding: 0 }}>fund +</button></>
+                          )}
                           {!wallet.address && acctBal !== null && Number(acctBal) === 0 && (
-                            <> · <a href="https://faucet.flare.network/coston2" target="_blank" rel="noreferrer" style={{ fontSize: "0.7rem" }}>faucet ↗</a></>
+                            <> · <a href={CONFIG.faucet} target="_blank" rel="noreferrer" style={{ fontSize: "0.7rem" }}>faucet ↗</a></>
                           )}
                         </span>
                       </div>
@@ -250,6 +290,11 @@ export default function App() {
             </span>
           </nav>
         </div>
+        {faucetMsg && (
+          <div className="wrap" style={{ paddingBottom: 12 }}>
+            <div className="notice ok">{faucetMsg}</div>
+          </div>
+        )}
         {evm.address && !evm.chainOk && (
           <div className="wrap" style={{ paddingBottom: 12 }}>
             <div className="notice err" style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap" }}>

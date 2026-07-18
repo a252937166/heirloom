@@ -61,6 +61,19 @@ export async function xrpBalance(address: string): Promise<string | null> {
   }
 }
 
+/** Ask the official XRPL testnet faucet to fund an existing address (CORS-enabled). */
+export async function fundTestXrp(address: string): Promise<boolean> {
+  try {
+    const r = await fetch("https://faucet.altnet.rippletest.net/accounts", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ destination: address }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 export const strToHex = (s: string) =>
   Array.from(new TextEncoder().encode(s))
     .map((b) => b.toString(16).padStart(2, "0"))
