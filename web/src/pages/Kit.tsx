@@ -6,6 +6,8 @@ import { VaultView, readVault, short } from "../lib/chain";
 
 interface Recovery {
   ownerXrpl: string | null;
+  ownerEvm?: string | null;
+  mode?: string | null;
   beneficiaryXrpl: string | null;
   reference: string | null;
   beacon: string;
@@ -63,7 +65,8 @@ export function Kit() {
               ["Claim page", url],
               ["Vault contract", address],
               ["Network", "Flare Coston2 (chain 114) + XRPL testnet"],
-              ["Owner XRPL address", rec?.ownerXrpl ?? "—"],
+              [rec?.mode === "evm" ? "Owner (MetaMask/OKX account)" : "Owner XRPL address", rec?.ownerXrpl ?? rec?.ownerEvm ?? "—"],
+              ["Check-in method", rec?.mode === "evm" ? "One-click Flare transaction (heartbeatEvm)" : "1-drop XRPL payment to the beacon"],
               ["Beneficiary address", rec?.beneficiaryXrpl ?? "(the address the owner chose — yours)"],
               ["Heartbeat beacon", rec?.beacon ?? CONFIG.beacon],
               ["Heartbeat reference", rec?.reference ?? "—"],
@@ -96,12 +99,21 @@ export function Kit() {
 
         <h3 style={{ margin: "22px 0 10px" }}>If Heirloom itself is gone</h3>
         <p style={{ fontSize: "0.82rem", color: "var(--mist)" }}>
-          Everything above is enough for any developer to finish the claim without us: the vault contract
-          verifies (1) an FDC <span className="mono">ReferencedPaymentNonexistence</span> proof over the beacon
-          with the heartbeat reference, source-filtered by the owner address, chained from the last heartbeat
-          ledger + 1, and (2) your address preimage. The contract is verified on the explorer; the keeper is
-          open source at <span className="mono">github.com/a252937166/heirloom</span>. Any party may submit the
-          proofs — the vault does not care who cranks it.
+          {rec?.mode === "evm" ? (
+            <>Everything above is enough for any developer to finish the claim without us: for this plan the
+            silence clock is Flare consensus time itself — once{" "}
+            <span className="mono">lastHeartbeatTs + period + grace</span> has passed, anyone can call{" "}
+            <span className="mono">startClaim</span> with your address, wait out the challenge window, and call{" "}
+            <span className="mono">executeRelease</span>. The contract is verified on the explorer; the keeper
+            is open source at <span className="mono">github.com/a252937166/heirloom</span>.</>
+          ) : (
+            <>Everything above is enough for any developer to finish the claim without us: the vault contract
+            verifies (1) an FDC <span className="mono">ReferencedPaymentNonexistence</span> proof over the beacon
+            with the heartbeat reference, source-filtered by the owner address, chained from the last heartbeat
+            ledger + 1, and (2) your address preimage. The contract is verified on the explorer; the keeper is
+            open source at <span className="mono">github.com/a252937166/heirloom</span>. Any party may submit the
+            proofs — the vault does not care who cranks it.</>
+          )}
         </p>
 
         <p style={{ fontSize: "0.75rem", marginTop: 20, color: "var(--mist-2)" }}>

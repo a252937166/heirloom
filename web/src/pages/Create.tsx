@@ -20,7 +20,7 @@ const mins = (s: number) => (s % 60 === 0 ? `${s / 60} minute${s === 60 ? "" : "
 
 export function Create() {
   const nav = useNavigate();
-  const { wallet, connect, connecting, notice } = useWallet();
+  const { wallet, evm, connect, connectEvm, connecting } = useWallet();
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -39,6 +39,8 @@ export function Create() {
 
   const set = (k: keyof Draft, v: string | number) => setDraft((d) => ({ ...d, [k]: v }));
   const owner = draft.ownerXrpl || wallet.address || "";
+  // an XRPL wallet (or typed XRPL address) always takes priority; MetaMask/OKX is the fallback owner mode
+  const evmMode = !isXrplAddr(owner) && !!evm.address;
 
   // funding progress: poll the keeper's events for the fresh vault
   useEffect(() => {
@@ -57,7 +59,7 @@ export function Create() {
     try {
       const r = await fetch(`${CONFIG.api}/vaults`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...draft, ownerXrpl: owner }),
+        body: JSON.stringify(evmMode ? { ...draft, ownerXrpl: undefined, ownerEvm: evm.address } : { ...draft, ownerXrpl: owner }),
       });
       if (!r.ok) throw new Error(await r.text());
       setCreated(await r.json());
@@ -122,23 +124,33 @@ export function Create() {
             heartbeats count, only it can cancel. <strong>Theirs</strong> is where the XRP arrives if you go silent.
           </p>
           {wallet.address ? (
-            <div className="notice ok" style={{ marginBottom: 14 }}>Connected: <span className="mono">{wallet.address}</span></div>
+            <div className="notice ok" style={{ marginBottom: 14 }}>Connected (XRPL): <span className="mono">{wallet.address}</span></div>
+          ) : evm.address ? (
+            <div className="notice ok" style={{ marginBottom: 14 }}>
+              Owner via {evm.kind}: <span className="mono">{short(evm.address, 8)}</span> — your check-ins become
+              one-click Flare transactions. Prefer XRPL-native heartbeats? Connect GemWallet or type an XRPL
+              address below and it takes priority.
+            </div>
           ) : (
             <div style={{ marginBottom: 14 }}>
-              <button className="btn btn-ghost" onClick={connect} disabled={connecting}>
-                {connecting ? "Looking for wallet…" : "Connect GemWallet"}
-              </button>
-              {notice === "no-wallet" && (
-                <p className="hint" style={{ fontSize: "0.8rem", color: "var(--mist)", marginTop: 10 }}>
-                  No GemWallet? No problem — paste your address below; you'll pay by copying the payment details
-                  into Xaman or any wallet.
-                </p>
-              )}
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button className="btn btn-ghost" onClick={connect} disabled={connecting}>
+                  {connecting ? "Looking for wallet…" : "Connect GemWallet (XRPL)"}
+                </button>
+                <button className="btn btn-ghost" onClick={connectEvm} disabled={connecting} style={{ opacity: 0.85 }}>
+                  MetaMask / OKX
+                </button>
+              </div>
+              <p className="hint" style={{ fontSize: "0.8rem", color: "var(--mist)", marginTop: 10 }}>
+                The XRPL wallet is the native path — 1-drop heartbeats, proven by Flare. No XRPL wallet? Use
+                MetaMask/OKX: Coston2 is added automatically and check-ins are one click. Or paste addresses
+                below and pay from any wallet.
+              </p>
             </div>
           )}
           <div className="field">
-            <label>Your XRPL address (the owner)</label>
-            <input placeholder="r…" value={draft.ownerXrpl || wallet.address || ""} onChange={(e) => set("ownerXrpl", e.target.value.trim())} />
+            <label>{evmMode ? "Your XRPL address — optional; your connected EVM account is the owner" : "Your XRPL address (the owner)"}</label>
+            <input placeholder={evmMode ? "r… (leave empty to check in from MetaMask/OKX)" : "r…"} value={draft.ownerXrpl || wallet.address || ""} onChange={(e) => set("ownerXrpl", e.target.value.trim())} />
           </div>
           <div className="field">
             <label>Their XRPL address (the beneficiary)</label>
@@ -148,7 +160,7 @@ export function Create() {
             )}
           </div>
           <button className="btn btn-primary"
-            disabled={!isXrplAddr(owner) || !isXrplAddr(draft.beneficiaryXrpl) || owner === draft.beneficiaryXrpl}
+            disabled={(!isXrplAddr(owner) && !evmMode) || !isXrplAddr(draft.beneficiaryXrpl) || (isXrplAddr(owner) && owner === draft.beneficiaryXrpl)}
             onClick={() => { if (!draft.ownerXrpl && wallet.address) set("ownerXrpl", wallet.address); setStep(1); }}>
             Continue
           </button>
@@ -210,7 +222,8 @@ export function Create() {
           <h3 style={{ marginBottom: 14 }}>The promise you are about to make</h3>
           <div style={{ fontSize: "0.98rem", color: "var(--paper)", display: "grid", gap: 10, marginBottom: 18 }}>
             <p style={{ color: "var(--paper)" }}>
-              · As long as you check in within <strong>{mins(draft.heartbeatPeriod)}</strong>, nobody can touch
+              · As long as you check in within <strong>{mins(draft.heartbeatPeriod)}</strong>
+              {evmMode ? ` (one click in ${evm.kind ?? "your wallet"})` : ""}, nobody can touch
               this vault — not the beneficiary, not Heirloom, not anyone.
             </p>
             <p style={{ color: "var(--paper)" }}>
@@ -246,6 +259,7 @@ export function Create() {
           <p style={{ fontSize: "0.95rem", marginBottom: 14 }}>
             Now protect <strong>{draft.lots * 10} XRP</strong> with one payment
             {wallet.address ? " — review it in GemWallet." : " from any XRPL testnet wallet."}
+            {evmMode && !wallet.address ? " The memo — not the sender — routes the mint to your vault, so any funded testnet account works." : ""}
           </p>
 
           {wallet.address ? (
@@ -314,7 +328,7 @@ export function Create() {
           <ol style={{ color: "var(--mist)", fontSize: "0.92rem", paddingLeft: 20, marginBottom: 18, display: "grid", gap: 6 }}>
             <li>Print the Recovery Kit and give it to your beneficiary.</li>
             <li>Have them open the claim page and run "Test early-claim protection".</li>
-            <li>Send your first heartbeat and watch the dial reset.</li>
+            <li>{evmMode ? "Open your plan and press “Check in” — one wallet click resets the dial." : "Send your first heartbeat and watch the dial reset."}</li>
           </ol>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={() => nav(`/vault/${created.vault}`)}>Open my plan</button>

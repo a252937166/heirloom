@@ -59,10 +59,16 @@ beneficiary's wallet ◀─── real XRP
 
 ## Try it (judges)
 
-1. **60 seconds:** open https://heirloom.axiqo.xyz — "A real plan, replayed" walks the five chapters of an
-   actual completed vault (creation → heartbeat → silence → challenge → 9.95 XRP delivered), every chapter
-   linking to its real transactions. Open the plan's receipt for the full payout evidence.
-2. **5 minutes:** *Create a plan* → connect [GemWallet](https://gemwallet.app) (XRPL testnet) or paste any funded testnet address → the keeper deploys **your own vault** on Coston2 → fund it with the one displayed XRPL payment → watch FXRP arrive and the dial go live. Send a heartbeat; open the beneficiary view and try to claim early — watch the chain refuse.
+1. **60 seconds:** open https://heirloom.axiqo.xyz/case/001 — the **Live Case Dashboard**: one real completed
+   lifecycle in seven chapters (promise → funding → heartbeat → blocked early claim → silence proof →
+   challenge → 9.95 XRP delivered), with a dual-ledger transaction rail, a reconciled payout receipt whose
+   five integrity checks are generated from chain data (`spike/build-case.mjs`), and a 90-second guided tour.
+   No wallet, no waiting, every claim clickable to its explorer page.
+2. **5 minutes:** *Create a plan* → connect [GemWallet](https://gemwallet.app) (XRPL-native, the primary path)
+   — or **MetaMask/OKX** (Coston2 is added to the wallet automatically; check-ins become one-click
+   transactions and consensus time is the silence clock) — or paste any funded testnet address. The keeper
+   deploys **your own vault** on Coston2 → fund it with the one displayed XRPL payment → watch FXRP arrive
+   and the dial go live. Send a heartbeat; open the beneficiary view and try to claim early — watch the chain refuse.
 3. **Deep:** contracts in [`contracts/`](contracts/) (12 unit tests incl. adversarial cases), proof mechanics in [`spike/`](spike/) (gate scripts with saved on-chain artifacts), keeper in [`keeper/`](keeper/), threat model in [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
 Demo timing note: heartbeat periods are minutes on testnet so the full story is visible in one sitting; production timing would be 90–180 days with 7-day rolling checkpoints (the ~14-day attestation window limit was measured, and the chaining is implemented and tested on-chain).
@@ -77,7 +83,9 @@ Demo timing note: heartbeat periods are minutes on testnet so the full story is 
 | `spike/` | gate scripts that de-risked every primitive on-chain before the product was built, with saved proofs |
 | `docs/` | design document |
 
-Deployed on Coston2: factory [`0x090a69eE156108A6aE0a6a1a96575443ef4b584a`](https://coston2-explorer.flare.network/address/0x090a69eE156108A6aE0a6a1a96575443ef4b584a) · implementation `0x6D70A70a682ea5a9F37088b85Cf6941b03c4B361` · FXRP `0x0b6A…3dc7` · AssetManagerFXRP `0xc1Ca…bDFA`.
+Deployed on Coston2 (v3): factory [`0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2`](https://coston2-explorer.flare.network/address/0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2) · implementation `0x64eFCB1E2c3efC7868b645f9b3c6F99f6006a0d6` · FXRP `0x0b6A…3dc7` · AssetManagerFXRP `0xc1Ca…bDFA`.
+
+**Two owner modes.** XRPL-native is the hero path: heartbeats are 1-drop XRPL payments proven by FDC, and the EVM side holds no privileged keys at all. For owners without an XRPL wallet, **EVM-owner mode** (MetaMask/OKX) opens a wider door: the vault stores `ownerEvm`, check-ins are one-click `heartbeatEvm()` transactions whose consensus timestamp is the silence clock, and `cancelEvm()` hands the FXRP back — the same state machine, the same challenge window, the same FAssets redemption to the beneficiary's XRPL wallet. Verified end-to-end on Coston2 (create → check-in → cancel, all public transactions).
 
 ## Honest boundaries
 

@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/config.ts","./src/main.tsx","./src/components/pulsedial.tsx","./src/components/storyplayer.tsx","./src/lib/chain.ts","./src/lib/evm.ts","./src/lib/gem.ts","./src/pages/casestudy.tsx","./src/pages/claim.tsx","./src/pages/create.tsx","./src/pages/kit.tsx","./src/pages/landing.tsx","./src/pages/vault.tsx"],"checkPending":true,"version":"5.9.3"}

@@ -1,0 +1,62 @@
+{
+  "id": "case-001",
+  "builtAt": "2026-07-18T01:57:43.280Z",
+  "network": "Flare Coston2 + XRPL Testnet",
+  "truth": "Real XRPL transactions · Real FDC attestations · Real Coston2 contracts · Real XRP Testnet payout — demo identities, compressed timing",
+  "vault": "0x5655FED767c4315218393c5501c3624917a9BaEB",
+  "finalState": 5,
+  "verdict": "VERIFIED COMPLETE · RESIDUAL DISCLOSED",
+  "protectedFxrp": "10.07569",
+  "payoutXrp": "9.95",
+  "finalFxrpBalance": "0.08",
+  "heartbeatEpochs": 1,
+  "fdcRounds": [
+    1398674
+  ],
+  "silenceRound": 1398674,
+  "redemptionIds": [],
+  "mintTxFlare": "0x4d3561e67407e0a7ed756293c0460b353c989a02d32843ece21ea7722f9fde74",
+  "fundingTxXrpl": "7E48BC6E94DB6EB2A820D2D3F8B134EE3889F670581D18A6EBDD29B1221D4F7F",
+  "heartbeatTxXrpl": "A410533D4C8038F062076B95BA3C4D7C0D81587AF28058204379AA19A80ECB11",
+  "heartbeatTxFlare": null,
+  "heartbeatRound": null,
+  "createdTxFlare": "0x9b0192501cc9e2bf2c546a3dac54dff4db386ee8e2c1e79fa16beba8a388d502",
+  "claimStartTxFlare": "0x79dd4eec7b18521e7c3f481fc6e8c864647fd5580fcb61ef16eda8224bd9df59",
+  "silenceTxFlare": "0x6f89bcd7e9050fa09485bbe905f3b353d32d9697eb319f845c8e742713ee59da",
+  "redeemedFxrp": "10",
+  "settlement": {
+    "hash": "F1B2764CD5CAEC1E153E5C6C74539CCD65095AA5B0AA0232E3A57205B6584360",
+    "destination": "rKZo43bi3Vt5ba9gKzUbzMGx4tXV9NUXpq",
+    "amountDrops": "9950000",
+    "memoHex": "46425052664100020000000000000000000000000000000000000000025AF512",
+    "ledger": 19148200
+  },
+  "releaseTxFlare": "0xa7ae82aa9cd7d9e30300e1ffa6ac18e21b5675dff51150665c759d039613e031",
+  "challenge": {
+    "startedAt": 1784310826,
+    "endedAt": 1784310946
+  },
+  "residualNote": null,
+  "integrityChecks": [
+    {
+      "label": "Payout destination matches the configured beneficiary (hash preimage verified against XRPL tx)",
+      "passed": true
+    },
+    {
+      "label": "Settlement transaction carries the redemption payment reference in its memo",
+      "passed": true
+    },
+    {
+      "label": "Challenge window fully elapsed before the release executed",
+      "passed": true
+    },
+    {
+      "label": "Every redeemable lot settled; remaining 0.08 FXRP is below one 10-FXRP lot (FAssets redeems whole lots) and stays visible on-chain",
+      "passed": true
+    },
+    {
+      "label": "All key claims carry public transaction hashes",
+      "passed": true
+    }
+  ]
+}

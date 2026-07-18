@@ -15,7 +15,7 @@ import { Contract, Interface, hexlify, keccak256, concat, toUtf8Bytes, randomByt
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import {
   provider, log, sleep, addrHash, agentWallet, validatedLedger, xrplRpc,
-  proveXrpPayment, proveSilence, VAULT_ABI, FACTORY_ABI, XRP_DATA, buildMintMemo, DIRECT_MINT_PREFIX,
+  proveXrpPayment, proveSilence, VAULT_ABI, FACTORY_ABI, XRP_DATA, buildMintMemo, DIRECT_MINT_PREFIX, vaultConfig,
 } from "../spike/fdc-lib.mjs";
 
 const AM_EVENTS = new Interface([
@@ -73,27 +73,33 @@ app.get("/api/health", (_req, res) => res.json({ ok: true, factory: dep.factory,
 
 app.post("/api/vaults", async (req, res) => {
   try {
-    const { ownerXrpl, beneficiaryXrpl, heartbeatPeriod = 240, grace = 60, challenge = 120, lots = 2 } = req.body ?? {};
-    if (!/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(ownerXrpl ?? "") || !/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(beneficiaryXrpl ?? "")) {
-      return res.status(400).send("ownerXrpl and beneficiaryXrpl must be valid XRPL classic addresses");
+    const { ownerXrpl, ownerEvm, beneficiaryXrpl, heartbeatPeriod = 240, grace = 60, challenge = 120, lots = 2 } = req.body ?? {};
+    const evmMode = /^0x[0-9a-fA-F]{40}$/.test(ownerEvm ?? "");
+    if (!evmMode && !/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(ownerXrpl ?? "")) {
+      return res.status(400).send("provide ownerXrpl (XRPL mode) or ownerEvm (MetaMask/OKX mode)");
+    }
+    if (!/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(beneficiaryXrpl ?? "")) {
+      return res.status(400).send("beneficiaryXrpl must be a valid XRPL classic address");
     }
     const reference = hexlify(randomBytes(32));
     const nowL = await validatedLedger();
+    const ZERO32 = "0x" + "00".repeat(32);
     const cfg = [
-      addrHash(ownerXrpl), addrHash(beneficiaryXrpl), addrHash(BEACON), reference,
+      evmMode ? ZERO32 : addrHash(ownerXrpl), addrHash(beneficiaryXrpl), addrHash(BEACON), reference,
       BigInt(heartbeatPeriod), BigInt(grace), BigInt(challenge),
       BigInt(nowL.ledger), BigInt(nowL.ts), BigInt(dep.lotSizeUBA),
+      evmMode ? ownerEvm : "0x0000000000000000000000000000000000000000",
     ];
     const tx = await factory.createVault(cfg, 0n);
     const rc = await tx.wait();
     const ev = rc.logs.map((l) => { try { return factory.interface.parseLog(l); } catch { return null; } }).find((p) => p?.name === "VaultCreated");
     const vault = ev.args.vault;
     const meta = metaOf(vault);
-    Object.assign(meta, { ownerXrpl, beneficiaryXrpl, reference, createdTx: tx.hash });
+    Object.assign(meta, { ownerXrpl: evmMode ? null : ownerXrpl, ownerEvm: evmMode ? ownerEvm : null, mode: evmMode ? "evm" : "xrpl", beneficiaryXrpl, reference, createdTx: tx.hash });
     // gross: net = lots*10 XRP; fee 0.25% + 0.1 executor + margin 0.15
     const net = lots * 10;
     const gross = Math.ceil((net + 0.1 + 0.15) / 0.9975 * 1e6);
-    rec(vault, "created", `Vault created for ${ownerXrpl.slice(0, 8)}… → ${beneficiaryXrpl.slice(0, 8)}…`, { txFlare: tx.hash, tone: "gold" });
+    rec(vault, "created", `Vault created for ${(evmMode ? ownerEvm : ownerXrpl).slice(0, 8)}… → ${beneficiaryXrpl.slice(0, 8)}… (${evmMode ? "MetaMask/OKX owner" : "XRPL owner"})`, { txFlare: tx.hash, tone: "gold" });
     res.json({ vault, reference, fundingMemo: buildMintMemo(vault), coreVaultXrpl: dep.coreVaultXrpl, grossDrops: String(gross) });
   } catch (e) {
     res.status(500).send(e.shortMessage ?? e.message);
@@ -142,9 +148,18 @@ app.post("/api/vaults/:addr/funded", async (req, res) => {
 
 app.post("/api/vaults/:addr/heartbeat", async (req, res) => {
   const { addr } = req.params;
-  const { xrplTx } = req.body ?? {};
-  if (!xrplTx) return res.status(400).send("xrplTx required");
+  const { xrplTx, evmTx } = req.body ?? {};
+  if (!xrplTx && !evmTx) return res.status(400).send("xrplTx or evmTx required");
   try {
+    if (evmTx) {
+      // EVM-owner check-in: the owner already sent the transaction — verify
+      // against chain truth, then mirror it into the journey.
+      const v = vaultAt(addr);
+      const [ts, epoch] = await Promise.all([v.lastHeartbeatTs(), v.heartbeatEpoch()]);
+      if (Math.abs(Date.now() / 1000 - Number(ts)) > 600) return res.status(400).send("no recent check-in on-chain");
+      rec(addr, "alive", `Check-in recorded on Flare — epoch ${epoch}, dial reset (one-click owner transaction)`, { txFlare: evmTx, tone: "ok" });
+      return res.json({ ok: true, job: "none" });
+    }
     await runJob(addr, "heartbeat", async () => {
       rec(addr, "heartbeat", "Heartbeat seen on XRPL — proving it (FDC XRPPayment)", { txXrpl: xrplTx });
       const proof = await proveXrpPayment(agent, xrplTx);
@@ -167,24 +182,32 @@ app.post("/api/vaults/:addr/claim", async (req, res) => {
   try {
     const v = vaultAt(addr);
     const meta = metaOf(addr);
-    // the Recovery Kit carries the owner address so a claim never depends on
-    // this keeper's private state
-    const ownerXrpl = meta.ownerXrpl ?? ownerFromBody;
-    if (!ownerXrpl) {
-      return res.status(400).send("ownerXrpl required (printed on the Recovery Kit) — this keeper has no record of it");
+    const vcfg = await vaultConfig(v);
+    const isEvmVault = vcfg.ownerEvm !== "0x0000000000000000000000000000000000000000";
+    let ownerXrpl = null;
+    if (!isEvmVault) {
+      // the Recovery Kit carries the owner address so a claim never depends on
+      // this keeper's private state
+      ownerXrpl = meta.ownerXrpl ?? ownerFromBody;
+      if (!ownerXrpl) {
+        return res.status(400).send("ownerXrpl required (printed on the Recovery Kit) — this keeper has no record of it");
+      }
+      if (addrHash(ownerXrpl) !== vcfg.ownerXrplHash) {
+        return res.status(400).send("ownerXrpl does not match this vault's owner hash");
+      }
+      if (!meta.ownerXrpl) { meta.ownerXrpl = ownerXrpl; persist(); }
     }
-    if (addrHash(ownerXrpl) !== (await v.config()).ownerXrplHash) {
-      return res.status(400).send("ownerXrpl does not match this vault's owner hash");
-    }
-    if (!meta.ownerXrpl) { meta.ownerXrpl = ownerXrpl; persist(); }
     await runJob(addr, "claim", async () => {
       const deadline = Number(await v.silenceDeadline());
       const proven = Number(await v.silenceProvenThroughTs());
-      if (proven < deadline) {
+      if (isEvmVault) {
+        // EVM mode: consensus time is the silence oracle — no attestation needed
+        rec(addr, "claim", "Claim requested — silence measured by Flare consensus time (EVM-owner plan)", { tone: "warn" });
+      } else if (proven < deadline) {
         rec(addr, "claim", "Claim requested — asking Flare's network to attest the silence", { tone: "warn" });
         const nowL = await validatedLedger();
         const minLedger = Number(await v.nextSilenceLedger());
-        const cfg = await v.config();
+        const cfg = await vaultConfig(v);
         const proof = await proveSilence(agent, {
           beacon: BEACON, reference: cfg.heartbeatReference, ownerAddress: ownerXrpl,
           minLedger, deadlineLedger: nowL.ledger - 4, deadlineTs: deadline + 1,
@@ -268,7 +291,7 @@ app.post("/api/vaults/:addr/release", async (req, res) => {
 app.post("/api/vaults/:addr/cancel-intent", async (req, res) => {
   try {
     const v = vaultAt(req.params.addr);
-    const cfg = await v.config();
+    const cfg = await vaultConfig(v);
     res.json({
       beacon: BEACON,
       amountDrops: "1",
@@ -285,12 +308,23 @@ app.get("/api/vaults/:addr", (req, res) => {
   const job = jobs.get(req.params.addr.toLowerCase());
   // public recovery data: enough for anyone to rebuild every proof without this
   // keeper (the owner's address is public on XRPL after the first heartbeat)
-  const { ownerXrpl, beneficiaryXrpl, reference } = v.meta ?? {};
+  const { ownerXrpl, ownerEvm, mode, beneficiaryXrpl, reference } = v.meta ?? {};
   res.json({
     events: v.events,
     job: job ? { name: job.name, startedAt: job.startedAt } : null,
-    recovery: { ownerXrpl: ownerXrpl ?? null, beneficiaryXrpl: beneficiaryXrpl ?? null, reference: reference ?? null, beacon: BEACON },
+    recovery: { ownerXrpl: ownerXrpl ?? null, ownerEvm: ownerEvm ?? null, mode: mode ?? (ownerEvm ? "evm" : "xrpl"), beneficiaryXrpl: beneficiaryXrpl ?? null, reference: reference ?? null, beacon: BEACON },
   });
+});
+
+// plans lookup for EVM owners (the factory indexes by XRPL owner hash only)
+app.get("/api/plans/of/:owner", (req, res) => {
+  const q = req.params.owner.toLowerCase();
+  const out = [];
+  for (const [k, sv] of Object.entries(store.vaults)) {
+    const m = sv.meta ?? {};
+    if ((m.ownerEvm && m.ownerEvm.toLowerCase() === q) || (m.ownerXrpl && m.ownerXrpl.toLowerCase() === q)) out.push(k);
+  }
+  res.json({ vaults: out });
 });
 
 // --- beacon auto-scan: detect heartbeats for known vaults without any POST ----
@@ -315,6 +349,7 @@ async function beaconScan() {
       if (!vaultAddr || vaultAddr === "0x0000000000000000000000000000000000000000") continue;
       if (isCancel) {
         const key2 = vaultAddr.toLowerCase();
+        if (store.vaults[key2]?.meta?.mode === "evm") continue;
         const seen2 = ((store.vaults[key2] ??= { events: [], meta: {} }).meta.seenHb ??= []);
         const hash2 = tx.hash ?? t.hash;
         if (seen2.includes(hash2)) continue;
@@ -334,6 +369,7 @@ async function beaconScan() {
         continue;
       }
       const key = vaultAddr.toLowerCase();
+      if (store.vaults[key]?.meta?.mode === "evm") continue;
       const seen = ((store.vaults[key] ??= { events: [], meta: {} }).meta.seenHb ??= []);
       const hash = tx.hash ?? t.hash;
       if (seen.includes(hash)) continue;

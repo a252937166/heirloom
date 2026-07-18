@@ -17,7 +17,7 @@ export function Landing() {
           silence, gives you one final veto window — and only then redeems your XRP to the wallet you chose.
         </p>
         <div style={{ display: "flex", gap: 14, marginTop: 30, justifyContent: "center", flexWrap: "wrap" }}>
-          <a href="#story" className="btn btn-primary">Watch a real plan complete</a>
+          <Link to="/case/001" className="btn btn-primary">Watch a real plan complete</Link>
           <Link to="/create" className="btn btn-ghost">Create a test plan</Link>
         </div>
         <p className="mono" style={{ fontSize: "0.72rem", marginTop: 18, color: "var(--mist-2)" }}>
@@ -34,6 +34,16 @@ export function Landing() {
           transaction below ran on Flare Coston2 and the XRPL testnet, and each one links to its explorer page.
         </p>
         <StoryPlayer />
+        <div className="card" style={{ marginTop: 18, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div>
+            <div className="mono" style={{ fontSize: "0.66rem", color: "var(--verdant)", marginBottom: 6 }}>CASE 001 · COMPLETED</div>
+            <p style={{ fontSize: "0.88rem", color: "var(--mist)", margin: 0 }}>
+              One funding payment · one owner heartbeat · one blocked early claim · one verified silence
+              window · native XRP payout confirmed — with a reconciled receipt and integrity checks.
+            </p>
+          </div>
+          <Link className="btn btn-ghost" to="/case/001" style={{ whiteSpace: "nowrap" }}>Open the full case dashboard →</Link>
+        </div>
       </section>
 
       {/* 3 · two perspectives */}
