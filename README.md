@@ -89,7 +89,7 @@ Demo timing note: heartbeat periods are minutes on testnet so the full story is 
 
 | path | contents |
 |---|---|
-| `contracts/` | `HeirloomVault.sol` (7-state machine, dual-proof validation, challenge veto, XRPL-signed cancel, alternative EVM-owner mode), `HeirloomFactory.sol` (EIP-1167 clones), 19 tests, deploy scripts |
+| `contracts/` | `HeirloomVault.sol` (explicit lifecycle state machine — 8 states incl. the re-crankable `Cancelling`, dual-proof validation, challenge veto + veto-proof grace, XRPL-signed cancel, alternative EVM-owner mode), `HeirloomFactory.sol` (EIP-1167 clones), 19 tests, deploy scripts |
 | `keeper/` | permissionless crank service: proof automation, auto-scans with self-healing retries, rolling-checkpoint scheduler, redemption-default path, crash-safe journaled state, REST API |
 | `web/` | the app — GemWallet integration, Pulse Dial, evidence timeline, printable Recovery Kit |
 | `spike/` | gate scripts that de-risked every primitive on-chain before the product was built, with saved proofs |

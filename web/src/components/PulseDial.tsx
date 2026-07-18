@@ -44,7 +44,9 @@ export function PulseDial({
   const W = 9; // ring thickness
   const alive = state === 2 && remaining > 0;
   const challenge = state === 3;
-  const settled = state >= 5;
+  const settled = state === 5;            // green: value reached the beneficiary
+  const cancelledDone = state === 6;      // neutral: returned to the owner
+  const inFlight = state === 4 || state === 7; // amber: settlement in motion
   const AMBER_AT = 0.72; // the tail of the window renders orange
 
   const fmt = (s: number) => {
@@ -77,17 +79,19 @@ export function PulseDial({
         <circle cx={cx} cy={cx} r={r} fill="none" stroke="var(--line)" strokeWidth={W} opacity={0.55} />
         {/* settled: full green ring */}
         {settled && <circle cx={cx} cy={cx} r={r} fill="none" stroke={`url(#hl-green-${uid})`} strokeWidth={W} strokeLinecap="round" />}
+        {/* cancelled: neutral full ring — completed, but no payout story */}
+        {cancelledDone && <circle cx={cx} cy={cx} r={r} fill="none" stroke="var(--mist-2)" strokeWidth={W} strokeLinecap="round" opacity={0.7} />}
         {/* elapsed, safe part (green) */}
-        {!settled && greenTo > eps && (
+        {!settled && !cancelledDone && !inFlight && greenTo > eps && (
           <path d={arc(cx, cx, r, 0, greenTo)} fill="none" stroke={`url(#hl-green-${uid})`} strokeWidth={W} strokeLinecap="round" />
         )}
         {/* the tail of the window / challenge (orange) */}
-        {!settled && (challenge ? frac > eps : frac > AMBER_AT) && (
+        {!settled && !cancelledDone && !inFlight && (challenge ? frac > eps : frac > AMBER_AT) && (
           <path d={arc(cx, cx, r, challenge ? 0 : amberFrom, Math.max(amberTo, (challenge ? 0 : amberFrom) + eps))}
             fill="none" stroke={`url(#hl-amber-${uid})`} strokeWidth={W} strokeLinecap="round" />
         )}
-        {/* releasing: full amber */}
-        {state === 4 && <circle cx={cx} cy={cx} r={r} fill="none" stroke={`url(#hl-amber-${uid})`} strokeWidth={W} strokeLinecap="round" opacity={0.9} />}
+        {/* in flight (releasing or cancelling): full amber */}
+        {inFlight && <circle cx={cx} cy={cx} r={r} fill="none" stroke={`url(#hl-amber-${uid})`} strokeWidth={W} strokeLinecap="round" opacity={0.9} />}
         {/* alive ping */}
         {alive && <circle className="pulse-ping" cx={cx} cy={cx} r={r - 16} fill="none" stroke="var(--verdant)" strokeWidth={1.2} />}
         {challenge && <circle className="pulse-ping" cx={cx} cy={cx} r={r - 16} fill="none" stroke="var(--ember)" strokeWidth={1.4} />}
@@ -106,7 +110,7 @@ export function PulseDial({
         />
       </svg>
       <div className="dial-center">
-        <div className={settled ? "big pop-in" : "big"} style={settled ? { color: "var(--verdant)" } : undefined}>{state >= 4 ? (settled ? "✓" : "—") : fmt(remaining)}</div>
+        <div className={settled || cancelledDone ? "big pop-in" : "big"} style={settled ? { color: "var(--verdant)" } : cancelledDone ? { color: "var(--mist)" } : undefined}>{state >= 4 ? (settled || cancelledDone ? "✓" : "…") : fmt(remaining)}</div>
         <div className="small">{label ?? (challenge ? "challenge window" : "until silence deadline")}</div>
       </div>
     </div>

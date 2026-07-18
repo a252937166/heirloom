@@ -72,7 +72,7 @@ export function Claim() {
   const residual = useMemo(() => events.find((e) => e.kind === "residual"), [events]);
   const released = useMemo(() => events.find((e) => e.kind === "released"), [events]);
 
-  const step = !v ? 0 : v.state >= 5 ? 5 : v.state === 4 ? 3 : v.state === 3 ? 2 : beneMatches ? 1 : 0;
+  const step = !v ? 0 : v.state === 5 ? 5 : v.state === 4 ? 3 : v.state === 3 ? 2 : v.state >= 6 ? 0 : beneMatches ? 1 : 0;
 
   async function requestClaim() {
     setBusy(true); setErr(null); setNote(null);
@@ -123,7 +123,7 @@ export function Claim() {
     <main className="wrap" style={{ padding: "44px 24px", maxWidth: 880 }}>
       <div className="eyebrow">Beneficiary access</div>
       <h1 style={{ fontSize: "1.9rem", margin: "8px 0 4px" }}>
-        {v.state >= 5 ? "The XRP reached its person" : v.state === 4 ? "Redemption in progress" : v.state === 3 ? "Final challenge running" : "Claim, when the time truly comes"}
+        {v.state === 5 ? "The XRP reached its person" : v.state >= 6 ? "This plan was cancelled by its owner" : v.state === 4 ? "Redemption in progress" : v.state === 3 ? "Final challenge running" : "Claim, when the time truly comes"}
       </h1>
       <p style={{ fontSize: "0.92rem", maxWidth: 620 }}>
         Nothing on this page can rush the plan: funds move only after Flare's network proves the owner's
@@ -255,7 +255,17 @@ export function Claim() {
               )}
             </div>
           ) : null}
-          {v.state >= 5 && (
+          {v.state >= 6 && (
+            <div className="card">
+              <h3 style={{ marginBottom: 8 }}>{v.state === 7 ? "Cancelling — value returning to the owner" : "Plan cancelled by its owner"}</h3>
+              <p style={{ fontSize: "0.9rem" }}>
+                {v.state === 7
+                  ? "The cancel redemption is settling through FAssets. No beneficiary claim is available."
+                  : "The redeemable value was returned to the owner. No beneficiary claim is available."}
+              </p>
+            </div>
+          )}
+          {v.state === 5 && (
             <div className="card" style={{ borderColor: "color-mix(in srgb, var(--verdant) 45%, transparent)" }}>
               <h3 style={{ marginBottom: 12 }}>Payout receipt</h3>
               <div className="status-grid">
@@ -278,7 +288,6 @@ export function Claim() {
                 )}
               </div>
               {residual && <div className="notice" style={{ marginTop: 12 }}>{residual.label} — it stays visible in the vault contract.</div>}
-              {v.state === 6 && <div className="notice" style={{ marginTop: 12 }}>This plan was cancelled by its owner; funds were redeemed back to them.</div>}
             </div>
           )}
 
