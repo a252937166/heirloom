@@ -53,7 +53,7 @@ export function Landing() {
             Keep the keys.<br />Leave a path.
           </h1>
           <p style={{ fontSize: "1.02rem", maxWidth: 480 }}>
-            If you go silent, your XRP reaches the people you choose. Not a day earlier. No company in between.
+            If you go silent, your XRP reaches the person you chose. Not a day earlier. Heirloom never holds your keys and cannot redirect the payout.
           </p>
           <div style={{ display: "flex", gap: 12, marginTop: 26, flexWrap: "wrap" }}>
             <Link to="/case/001" className="btn btn-primary">Watch a real plan complete</Link>
@@ -72,6 +72,9 @@ export function Landing() {
           <div style={{ display: "grid", gap: 12 }}>
             <MiniStatus dot="var(--mist-2)" title="Final veto" sub="not started" />
             <MiniStatus dot="var(--ember)" title="Would unlock" sub="only if silence is proven" dashed />
+            <p className="mono" style={{ fontSize: "0.58rem", color: "var(--mist-2)", margin: 0, maxWidth: 150 }}>
+              illustrative plan state
+            </p>
           </div>
         </div>
       </section>
@@ -80,9 +83,9 @@ export function Landing() {
       <section className="wrap" style={{ padding: "0 24px 30px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
           <div className="metric"><span className="ic">▦</span><span><b>{stats.plans ?? "…"}</b><span className="lbl">Plans created</span></span></div>
-          <div className="metric"><span className="ic green">◈</span><span><b>{stats.protectedXrp ?? "…"} FXRP</b><span className="lbl">Protected right now</span></span></div>
+          <div className="metric"><span className="ic green">◈</span><span><b>{stats.protectedXrp ?? "…"} FXRP</b><span className="lbl">Protected (sampled plans)</span></span></div>
           <div className="metric"><span className="ic violet">⇄</span><span><b>{mcase.payoutXrp} XRP</b><span className="lbl">Delivered in Case #001</span></span></div>
-          <div className="metric"><span className="ic orange">⛨</span><span><b>100%</b><span className="lbl">Non-custodial</span></span></div>
+          <div className="metric"><span className="ic orange">⛨</span><span><b>0</b><span className="lbl">Heirloom-held keys</span></span></div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 12 }}>
           {[

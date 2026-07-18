@@ -3,8 +3,8 @@ export const CONFIG = {
   rpc: "https://coston2-api.flare.network/ext/C/rpc",
   explorer: "https://coston2-explorer.flare.network",
   xrplExplorer: "https://testnet.xrpl.org",
-  factory: "0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2",
-  implementation: "0x64eFCB1E2c3efC7868b645f9b3c6F99f6006a0d6",
+  factory: "0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f",
+  implementation: "0xDe3816E38c2cd8F3CD9c8AE10C0a33CD7f7a8A48",
   fxrp: "0x0b6A3645c240605887a5532109323A3E12273dc7",
   assetManager: "0xc1Ca88b937d0b528842F95d5731ffB586f4fbDFA",
   coreVaultXrpl: "rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p",
@@ -28,4 +28,5 @@ export const STATE_NAMES = [
   "Releasing",
   "Released",
   "Cancelled",
+  "Cancelling",
 ] as const;

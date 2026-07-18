@@ -36,7 +36,8 @@ contract HeirloomVault {
         ClaimPending,
         Releasing,
         Released,
-        Cancelled
+        Cancelled,
+        Cancelling // cancel redemption in flight — re-crankable until settled
     }
 
     struct Config {
@@ -47,6 +48,9 @@ contract HeirloomVault {
         uint64 heartbeatPeriod; // seconds owner may stay silent
         uint64 gracePeriod; // extra seconds before a claim may start
         uint64 challengePeriod; // seconds a pending claim can be vetoed by a heartbeat
+        uint64 vetoProofGrace; // extra seconds after the challenge cutoff during which a
+        //                        pre-cutoff heartbeat PROOF may still land and veto (FDC
+        //                        rounds take 90-180s; the XRPL timestamp decides, not latency)
         uint64 creationLedger; // XRPL validated ledger at creation (silence anchor #0)
         uint64 creationTs; // its close time (unix)
         uint256 lotSizeUBA; // FAssets lot size, cached at creation
@@ -71,6 +75,7 @@ contract HeirloomVault {
     uint64 public silenceProvenThroughTs;
     uint64 public claimChallengeEndsAt;
     string public beneficiaryXrpl; // revealed at claim time (preimage of beneficiaryXrplHash)
+    string public cancelUnderlying; // owner XRPL address, kept while a cancel redemption settles
     uint256 public crankRewardWei; // flat reward per successful keeper crank, from vault reserve
 
     event VaultActivated(uint256 fxrpAmount);
@@ -90,6 +95,7 @@ contract HeirloomVault {
     error WindowMismatch();
     error SilenceNotProven();
     error ChallengeNotOver();
+    error VetoWindowClosed();
     error BadPreimage();
 
     constructor(IERC20 _fxrp, IFAssetRedeemer _assetManager, IFdcVerification verificationOverride_) {
@@ -148,6 +154,9 @@ contract HeirloomVault {
             revert BadState(state);
         }
         if (config.ownerEvm == address(0) || msg.sender != config.ownerEvm) revert NotOwnerHeartbeat();
+        if (state == State.ClaimPending && block.timestamp > claimChallengeEndsAt) {
+            revert VetoWindowClosed();
+        }
         lastHeartbeatTs = uint64(block.timestamp);
         heartbeatEpoch += 1;
         if (state == State.ClaimPending) {
@@ -184,6 +193,9 @@ contract HeirloomVault {
         require(rb.hasMemoData && rb.firstMemoData.length == 32, "memo");
         require(bytes32(rb.firstMemoData) == config.heartbeatReference, "reference");
         require(rb.blockNumber > lastHeartbeatLedger, "stale");
+        if (state == State.ClaimPending && rb.blockTimestamp > claimChallengeEndsAt) {
+            revert VetoWindowClosed();
+        }
 
         lastHeartbeatLedger = rb.blockNumber;
         lastHeartbeatTs = rb.blockTimestamp;
@@ -254,7 +266,10 @@ contract HeirloomVault {
     ///         crank redeems the remainder.
     function executeRelease() external payable {
         if (state == State.ClaimPending) {
-            if (block.timestamp < claimChallengeEndsAt) revert ChallengeNotOver();
+            // the proof grace keeps a last-second heartbeat from losing a race
+            // against this crank: release waits until no pre-cutoff heartbeat
+            // proof can still be in flight
+            if (block.timestamp < claimChallengeEndsAt + config.vetoProofGrace) revert ChallengeNotOver();
             state = State.Releasing;
         }
         if (state != State.Releasing) revert BadState(state);
@@ -293,14 +308,40 @@ contract HeirloomVault {
         require(rb.hasMemoData && rb.firstMemoData.length == 32, "memo");
         require(bytes32(rb.firstMemoData) == cancelReference, "reference");
 
-        state = State.Cancelled;
+        state = State.Cancelling;
+        cancelUnderlying = ownerXrpl_;
         (uint256 requested, uint256 redeemed) = _redeemAll(ownerXrpl_);
         emit CancelExecuted(ownerXrpl_, requested, redeemed);
+        _finalizeCancel();
+    }
+
+    /// @notice FAssets may fulfil a cancel redemption only partially
+    ///         (RedemptionAmountIncomplete) — anyone may crank the remainder.
+    function cancelCrank() external payable {
+        if (state != State.Cancelling) revert BadState(state);
+        (uint256 requested, uint256 redeemed) = _redeemAll(cancelUnderlying);
+        emit CancelExecuted(cancelUnderlying, requested, redeemed);
+        _finalizeCancel();
+        _payCrank();
+    }
+
+    function _finalizeCancel() internal {
+        uint256 remaining = fxrp.balanceOf(address(this));
+        if (remaining == 0) {
+            state = State.Cancelled;
+        } else if (remaining < assetManager.minimumRedeemAmountUBA()) {
+            state = State.Cancelled;
+            emit ResidualBelowMinimum(remaining, assetManager.minimumRedeemAmountUBA());
+        }
     }
 
     // ---------------------------------------------------------------------
     // views & internals
     // ---------------------------------------------------------------------
+
+    function releaseEligibleAt() public view returns (uint64) {
+        return claimChallengeEndsAt == 0 ? 0 : claimChallengeEndsAt + config.vetoProofGrace;
+    }
 
     function silenceDeadline() public view returns (uint64) {
         return lastHeartbeatTs + config.heartbeatPeriod + config.gracePeriod;

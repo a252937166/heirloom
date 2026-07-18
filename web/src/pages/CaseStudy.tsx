@@ -477,7 +477,7 @@ export function CaseStudy() {
                   ["Release transaction", m.releaseTxFlare ?? "—"],
                   ["Silence proof round", String(m.silenceRound ?? "—")],
                   ["Challenge completed", m.challenge ? new Date(m.challenge.endedAt * 1000).toLocaleString() : "—"],
-                  ["Final FXRP balance", `${m.finalFxrpBalance} FXRP${residual ? " (below one lot — disclosed, not hidden)" : ""}`],
+                  ["Final FXRP balance", `${m.finalFxrpBalance} FXRP${residual ? " (below the protocol redemption minimum — disclosed, not hidden)" : ""}`],
                   ["Final vault state", m.finalState === 5 ? "Released" : String(m.finalState)],
                 ] as [string, string][]).map(([k, val]) => (
                   <tr key={k} style={{ borderTop: "1px solid var(--line)" }}>

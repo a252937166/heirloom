@@ -59,6 +59,11 @@ contract MockAssetManager {
 
     uint256 public minRedeemUBA = 5_000_000;
     uint256 public lastAmountUBA;
+    bool public partialMode; // fulfil only half of each request (RedemptionAmountIncomplete)
+
+    function setPartialMode(bool v) external {
+        partialMode = v;
+    }
 
     function minimumRedeemAmountUBA() external view returns (uint256) {
         return minRedeemUBA;
@@ -73,7 +78,7 @@ contract MockAssetManager {
         lastAmountUBA = _amountUBA;
         lastUnderlying = _redeemerUnderlyingAddressString;
         lastExecutor = _executor;
-        _redeemedAmountUBA = _amountUBA;
+        _redeemedAmountUBA = partialMode ? _amountUBA / 2 : _amountUBA;
         // pull the redeemed FXRP from the caller (like burning for redemption)
         fxrp.transferFrom(msg.sender, address(this), _redeemedAmountUBA);
     }

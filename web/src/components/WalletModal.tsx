@@ -78,7 +78,7 @@ export function WalletModal({ open, onClose, onXrpl, onEvm, busy }: {
             style={{ background: "none", border: "none", color: "var(--mist-2)", fontSize: "1.05rem", cursor: "pointer", padding: 4 }}>✕</button>
         </div>
         <p style={{ fontSize: "0.82rem", color: "var(--mist)", margin: "6px 0 2px" }}>
-          A plan lives on two ledgers. XRPL is where you act — an EVM wallet is the wider door.
+          A plan lives on two ledgers. XRPL-native is the flagship path; the EVM wallet is an alternative setup with a simpler silence model.
         </p>
 
         <SectionHead label="XRPL (NATIVE)" badge="RECOMMENDED" note="1-drop heartbeats · proven by Flare's Data Connector" />

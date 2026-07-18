@@ -34,6 +34,15 @@ export function Create() {
     lots: 2,
   });
   const [created, setCreated] = useState<{ vault: string; reference: string; fundingMemo: string; grossDrops: string } | null>(null);
+  const [quote, setQuote] = useState<{ exactPaymentDrops: string; paymentAddress: string; expiresAt: number } | null>(null);
+  // a payment quote is only trustworthy while fresh — refetch at pay time, never reuse stale amounts
+  async function freshQuote() {
+    const r = await fetch(`${CONFIG.api}/direct-mint/quote?lots=${draft.lots}`);
+    if (!r.ok) throw new Error(await r.text());
+    const q = await r.json();
+    setQuote(q);
+    return q as { exactPaymentDrops: string; paymentAddress: string; expiresAt: number };
+  }
   const [paidTx, setPaidTx] = useState<string | null>(null);
   const [manualTx, setManualTx] = useState("");
   const [progress, setProgress] = useState<KeeperEvent[]>([]);
@@ -69,6 +78,7 @@ export function Create() {
       if (!r.ok) throw new Error(await r.text());
       setCreated(await r.json());
       refreshPlans();
+      freshQuote().catch(() => {});
       setStep(4);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -79,7 +89,8 @@ export function Create() {
     if (!created) return;
     setBusy(true); setErr(null);
     try {
-      const hash = await payWithMemo({ destination: CONFIG.coreVaultXrpl, amountDrops: created.grossDrops, memoHex: created.fundingMemo });
+      const q = await freshQuote(); // exact drops + payment address, quoted at pay time
+      const hash = await payWithMemo({ destination: q.paymentAddress, amountDrops: q.exactPaymentDrops, memoHex: created.fundingMemo });
       if (!hash) throw new Error("The wallet declined the payment.");
       setPaidTx(hash);
       await fetch(`${CONFIG.api}/vaults/${created.vault}/funded`, {
@@ -190,6 +201,10 @@ export function Create() {
                 </span>
               </>
             )}
+            <span className="hint" style={{ fontSize: "0.7rem", color: "var(--ember)" }}>
+              Use a self-custody XRPL wallet. Never an exchange deposit address — those need a destination
+              tag and the payout would be lost in the exchange's omnibus account.
+            </span>
           </div>
           <button className="btn btn-primary"
             disabled={(!isXrplAddr(owner) && !evmMode) || !isXrplAddr(draft.beneficiaryXrpl) || (isXrplAddr(owner) && owner === draft.beneficiaryXrpl)}
@@ -297,8 +312,8 @@ export function Create() {
             !paidTx && (
               <>
                 <div className="status-grid" style={{ marginBottom: 14 }}>
-                  <div className="stat"><div className="k">Send exactly</div><div className="v">{(Number(created.grossDrops) / 1e6).toFixed(2)} XRP</div></div>
-                  <div className="stat"><div className="k">To</div><div className="v mono">{CONFIG.coreVaultXrpl}</div></div>
+                  <div className="stat"><div className="k">Send exactly</div><div className="v">{(Number(quote?.exactPaymentDrops ?? created.grossDrops) / 1e6).toFixed(2)} XRP</div></div>
+                  <div className="stat"><div className="k">To (quoted live)</div><div className="v mono">{quote?.paymentAddress ?? CONFIG.coreVaultXrpl}</div></div>
                   <div className="stat" style={{ gridColumn: "1 / -1" }}><div className="k">Memo (routes the mint to your vault)</div><div className="v mono">{created.fundingMemo}</div></div>
                 </div>
                 <div className="field">

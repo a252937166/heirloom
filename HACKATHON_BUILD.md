@@ -8,8 +8,10 @@ Chronology (see `git log` for the full record):
    `spike/gate1b-rpn.mjs`), rolling-checkpoint chaining + ~14-day attestation-depth measurement
    (`spike/gate2-rolling.mjs`).
 2. **Contracts** — `HeirloomVault` v1 → v2 (full-balance `redeemAmount`, honest residual states)
-   → v3 (alternative EVM-owner mode). 15 unit tests incl. adversarial suites. v3 deployed + source-verified
-   on Coston2 (factory `0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2`).
+   → v3 (alternative EVM-owner mode) → v4 (veto-race proof grace: the XRPL timestamp decides a veto, never
+   transaction ordering; re-crankable cancel settlement). 19 unit tests incl. adversarial, race and
+   partial-redemption suites. v4 deployed + source-verified on Coston2 (factory
+   `0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f`).
 3. **Keeper** — permissionless crank service: FDC proof automation, beacon/funding auto-scans with
    self-healing retries, chain-truth early-claim simulation (`simulate-early-claim`), structured receipts.
 4. **Web app** — story-first UI: Live Case Dashboard (`/case/001`) with a chain-generated, reconciled
@@ -17,5 +19,5 @@ Chronology (see `git log` for the full record):
 5. **Two full real-infrastructure lifecycles** (no mocks): funding → heartbeat → silence proof →
    claim → challenge → FAssets redemption → XRP on the beneficiary's wallet.
 
-Frozen submission state: tag `submission` (see releases); regenerate the case manifest with
+Frozen submission state: tag `submission-rc1` (a final `submission-v1` lands after the v4 canonical case); regenerate the case manifest with
 `node spike/build-case.mjs`.

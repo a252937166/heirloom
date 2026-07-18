@@ -21,10 +21,11 @@ export function NodeStepper({ items, size = 40 }: { items: NodeItem[]; size?: nu
       {items.map((it, i) => {
         const st = it.state ?? "todo";
         const c = COLOR[st];
+        const Tag: "button" | "div" = it.onClick ? "button" : "div";
         return (
           <div key={i} style={{ display: "flex", alignItems: "flex-start", flex: i < items.length - 1 ? "1 1 0" : "0 0 auto", minWidth: 0 }}>
-            <div onClick={it.onClick} role={it.onClick ? "button" : undefined}
-              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, cursor: it.onClick ? "pointer" : "default", minWidth: size + 16 }}>
+            <Tag onClick={it.onClick} aria-current={st === "active" ? "step" : undefined}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, cursor: it.onClick ? "pointer" : "default", minWidth: size + 16, background: "none", border: "none", padding: 0, font: "inherit", color: "inherit" }}>
               <span style={{
                 width: size, height: size, borderRadius: "50%", display: "grid", placeItems: "center",
                 fontSize: size * 0.38, fontWeight: 700, color: c,
@@ -39,7 +40,7 @@ export function NodeStepper({ items, size = 40 }: { items: NodeItem[]; size?: nu
                 <span style={{ display: "block", fontSize: "0.72rem", fontWeight: 600, color: st === "todo" ? "var(--mist-2)" : "var(--paper)", whiteSpace: "nowrap" }}>{it.label}</span>
                 {it.sub && <span className="mono" style={{ display: "block", fontSize: "0.58rem", color: "var(--mist-2)", whiteSpace: "nowrap", marginTop: 2 }}>{it.sub}</span>}
               </span>
-            </div>
+            </Tag>
             {i < items.length - 1 && (
               <span style={{ flex: 1, height: 1.6, minWidth: 14, background: `linear-gradient(90deg, ${c}55, var(--line))`, marginTop: size / 2 }} />
             )}

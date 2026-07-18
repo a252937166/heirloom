@@ -211,6 +211,13 @@ export function Vault() {
               </div>
             </div>
             <div>
+              <div className="mono" style={{ fontSize: "0.62rem", color: "var(--mist-2)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Earliest release</div>
+              <div style={{ fontSize: "0.95rem", color: "var(--paper)", fontWeight: 600 }}>
+                {new Date((v.claimChallengeEndsAt + v.vetoProofGrace) * 1000).toLocaleTimeString()}
+              </div>
+              <div className="mono" style={{ fontSize: "0.64rem", color: "var(--mist-2)" }}>+{v.vetoProofGrace}s proof buffer</div>
+            </div>
+            <div>
               <div className="mono" style={{ fontSize: "0.62rem", color: "var(--mist-2)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Claim started</div>
               <div style={{ fontSize: "0.95rem", color: "var(--paper)", fontWeight: 600 }}>
                 {Math.max(0, now - (v.claimChallengeEndsAt - v.challengePeriod)) < 120

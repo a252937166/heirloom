@@ -55,8 +55,8 @@ the showcase.
 
 - **FAssets** — the only trust-minimized way for a contract to custody XRP and pay real XRP back out (direct minting in, redemption out).
 - **FDC `XRPPayment`** — heartbeats, funding detection and cancel commands are all owner-signed XRPL facts, proven to the contract.
-- **FDC `ReferencedPaymentNonexistence`** — the industry's only consensus *proof of absence*: source-filtered silence, chained ledger-by-ledger. This attestation type had, to our knowledge, never been showcased in a product before.
-- **The EVM side has no privileged keys.** Every state transition is authorized by an XRPL event or a public timeout; every keeper action is a permissionless crank anyone could submit with the same public data.
+- **FDC `ReferencedPaymentNonexistence`** — the FDC's consensus *proof of absence*: source-filtered silence, chained ledger-by-ledger. This attestation type had, to our knowledge, never been showcased in a product before.
+- **In the flagship XRP-native mode, the EVM side has no privileged user key.** Every state transition is authorized by an XRPL event or a public timeout; every keeper action is a permissionless crank anyone could submit with the same public data. (The alternative EVM-owner setup uses the owner's own wallet key — never Heirloom's.)
 
 ```
 XRPL (where you act)                         Flare (where it is proven & enforced)
@@ -80,7 +80,7 @@ beneficiary's wallet ◀─── real XRP
    measured by consensus time — a simpler model, honestly labelled) — or paste any funded testnet address. The keeper
    deploys **your own vault** on Coston2 → fund it with the one displayed XRPL payment → watch FXRP arrive
    and the dial go live. Send a heartbeat; open the beneficiary view and try to claim early — watch the chain refuse.
-3. **Deep:** contracts in [`contracts/`](contracts/) (15 unit tests incl. adversarial + EVM-owner suites), proof mechanics in [`spike/`](spike/) (gate scripts with saved on-chain artifacts), keeper in [`keeper/`](keeper/), threat model in [`THREAT_MODEL.md`](THREAT_MODEL.md).
+3. **Deep:** contracts in [`contracts/`](contracts/) (19 unit tests incl. adversarial, veto-race and partial-redemption suites), proof mechanics in [`spike/`](spike/) (gate scripts with saved on-chain artifacts), keeper in [`keeper/`](keeper/), threat model in [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
 Demo timing note: heartbeat periods are minutes on testnet so the full story is visible in one sitting; production timing would be 90–180 days with 7-day rolling checkpoints (the ~14-day attestation window limit was measured, and the chaining is implemented and tested on-chain).
 
@@ -88,13 +88,13 @@ Demo timing note: heartbeat periods are minutes on testnet so the full story is 
 
 | path | contents |
 |---|---|
-| `contracts/` | `HeirloomVault.sol` (7-state machine, dual-proof validation, challenge veto, XRPL-signed cancel, alternative EVM-owner mode), `HeirloomFactory.sol` (EIP-1167 clones), 15 tests, deploy scripts |
+| `contracts/` | `HeirloomVault.sol` (7-state machine, dual-proof validation, challenge veto, XRPL-signed cancel, alternative EVM-owner mode), `HeirloomFactory.sol` (EIP-1167 clones), 19 tests, deploy scripts |
 | `keeper/` | permissionless crank service: proof automation, beacon auto-scan, REST API for the app |
 | `web/` | the app — GemWallet integration, Pulse Dial, evidence timeline, printable Recovery Kit |
 | `spike/` | gate scripts that de-risked every primitive on-chain before the product was built, with saved proofs |
 | `docs/` | design document |
 
-Deployed on Coston2 (v3): factory [`0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2`](https://coston2-explorer.flare.network/address/0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2) · implementation `0x64eFCB1E2c3efC7868b645f9b3c6F99f6006a0d6` · FXRP `0x0b6A…3dc7` · AssetManagerFXRP `0xc1Ca…bDFA`.
+Deployed on Coston2 (v4, source-verified): factory [`0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f`](https://coston2-explorer.flare.network/address/0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f) · implementation `0xDe3816E38c2cd8F3CD9c8AE10C0a33CD7f7a8A48` · FXRP `0x0b6A…3dc7` · AssetManagerFXRP `0xc1Ca…bDFA`.
 
 **Alternative setup — EVM-owner mode.** XRPL-native is the flagship path and the whole story above: heartbeats are 1-drop XRPL payments proven by FDC, and the EVM side holds no privileged keys at all. For owners without an XRPL wallet, **EVM-owner mode** (MetaMask/OKX) opens a wider door: the vault stores `ownerEvm`, check-ins are one-click `heartbeatEvm()` transactions whose consensus timestamp is the silence clock, and `cancelEvm()` hands the FXRP back — the same state machine, the same challenge window, the same FAssets redemption to the beneficiary's XRPL wallet. Verified end-to-end on Coston2 (create → check-in → cancel, all public transactions).
 
