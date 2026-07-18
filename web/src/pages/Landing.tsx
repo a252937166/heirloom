@@ -1,13 +1,14 @@
 import { Link } from "react-router-dom";
 import { CONFIG } from "../config";
 import { StoryPlayer } from "../components/StoryPlayer";
+import { FlareMark } from "../components/FlareMark";
 
 export function Landing() {
   return (
     <main>
       {/* 1 · hero: the task, not the protocol */}
       <section className="wrap" style={{ padding: "78px 24px 54px", maxWidth: 900, textAlign: "center" }}>
-        <div className="eyebrow">The continuity vault for XRP · built on Flare</div>
+        <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 7, justifyContent: "center" }}>The continuity vault for XRP · built on <FlareMark size={15} /></div>
         <h1 style={{ margin: "16px 0 18px" }}>
           Keep the keys.<br />
           <em style={{ color: "var(--lamplight)", fontStyle: "italic" }}>Leave a path.</em>
@@ -102,7 +103,7 @@ export function Landing() {
 
       {/* 5 · why only Flare */}
       <section className="wrap" style={{ padding: "44px 24px" }}>
-        <div className="eyebrow">Why this needs Flare — two ledgers, one plan</div>
+        <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 7 }}>Why this needs <FlareMark size={16} /> — two ledgers, one plan</div>
         <div className="rails" style={{ marginTop: 8 }}>
           <span className="rail-label xrpl">XRP Ledger — where you act</span>
           <div className="rail xrpl" />
@@ -129,7 +130,7 @@ export function Landing() {
             </div>
           </div>
           <div className="rail flare" />
-          <span className="rail-label flare">Flare — where it is proven and enforced</span>
+          <span className="rail-label flare" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><FlareMark size={13} /> — where it is proven and enforced</span>
         </div>
       </section>
 
