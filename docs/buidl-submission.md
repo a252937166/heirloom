@@ -51,7 +51,7 @@ Local lifecycle (vault `0x22d820…8826`) and the **production stack** (live kee
 
 | step | evidence |
 |---|---|
-| Fund with one XRPL payment | 32-byte recipient memo → `executeDirectMinting` → **Case #001: 10.08 FXRP protected → 9.95 XRP delivered, 0.08 residual disclosed** minted straight into the vault clone |
+| Fund with one XRPL payment | 32-byte recipient memo → `executeDirectMinting` → **Case #001 (contract v4): 10.07569 FXRP protected → FULL-balance redemption #39635850 → 10.03 XRP delivered · final balance 0 · SETTLED - FULLY RECONCILED** minted straight into the vault clone |
 | Heartbeat | XRPL tx attested (rounds 1398606 / 1398650) → `recordHeartbeat` |
 | Silence | source-filtered RPN chained from heartbeat ledger + 1 (rounds 1398610 / on-chain `0x6f89bcd7…`) |
 | Claim → challenge → release | `ClaimStarted` → `ChallengeNotOver` enforced → `executeRelease` |

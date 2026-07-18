@@ -16,8 +16,10 @@ Chronology (see `git log` for the full record):
    self-healing retries, chain-truth early-claim simulation (`simulate-early-claim`), structured receipts.
 4. **Web app** — story-first UI: Live Case Dashboard (`/case/001`) with a chain-generated, reconciled
    manifest (`spike/build-case.mjs`), guided 90-second tour, EIP-6963 wallet connections, Recovery Kit.
-5. **Two full real-infrastructure lifecycles** (no mocks): funding → heartbeat → silence proof →
-   claim → challenge → FAssets redemption → XRP on the beneficiary's wallet.
+5. **Three full real-infrastructure lifecycles** (no mocks), one per contract era; the canonical v4 run
+   ends fully reconciled: funding → heartbeat → staticCall early-claim drill (blocked, SilenceNotProven) →
+   silence proof → challenge + 180s veto-proof grace → FULL-balance FAssets redemption → 10.03 XRP on the
+   beneficiary's wallet → final balance 0.
 
-Frozen submission state: tag `submission-rc1` (a final `submission-v1` lands after the v4 canonical case); regenerate the case manifest with
+Frozen submission state: tag `submission-v1` (v4 contracts + the fully-reconciled v4 canonical case); regenerate the case manifest with
 `node spike/build-case.mjs`.
