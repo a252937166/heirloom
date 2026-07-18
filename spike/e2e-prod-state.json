@@ -7,5 +7,88 @@
   "beacon": "r4vEYPxYkEWzoEySUETDRgnUKu8GG9b1GN",
   "beneficiary": "rKZo43bi3Vt5ba9gKzUbzMGx4tXV9NUXpq",
   "fundTx": "32746026FB0399FFFABF008EECFA2306608114ABC958FB8D8B6DE3575BF6C4C3",
-  "hbTx": "08F58E39A35587E614A4B39F101C93307C82D26DF3A248517B2C45AAE17EB1A1"
+  "hbTx": "08F58E39A35587E614A4B39F101C93307C82D26DF3A248517B2C45AAE17EB1A1",
+  "finalEvents": [
+    {
+      "at": 1784368637,
+      "kind": "created",
+      "label": "Vault created for rGRRECsJ… → rKZo43bi… (XRPL owner)",
+      "txFlare": "0x6d7fbcc00f6ca1625826d8a413ad2831d9675e2cc18f6a9e38eaa8f08174ecd4",
+      "tone": "gold"
+    },
+    {
+      "at": 1784368659,
+      "kind": "funding",
+      "label": "Funding payment seen — proving it to Flare (FDC XRPPayment)",
+      "txXrpl": "32746026FB0399FFFABF008EECFA2306608114ABC958FB8D8B6DE3575BF6C4C3"
+    },
+    {
+      "at": 1784368788,
+      "kind": "minted",
+      "label": "FXRP minted into the vault: 10.07569 FXRP (executed by a network executor)",
+      "tone": "ok"
+    },
+    {
+      "at": 1784368796,
+      "kind": "active",
+      "label": "Vault is ACTIVE — the dial is live",
+      "txFlare": "0x1f97e1335b958948029c5a86d79ad30b8330221f2d06161fbf21a150398c247e",
+      "tone": "ok"
+    },
+    {
+      "at": 1784368821,
+      "kind": "heartbeat",
+      "label": "Heartbeat detected on the beacon — proving it",
+      "txXrpl": "08F58E39A35587E614A4B39F101C93307C82D26DF3A248517B2C45AAE17EB1A1"
+    },
+    {
+      "at": 1784368990,
+      "kind": "alive",
+      "label": "Heartbeat proven — epoch 1, dial reset",
+      "txFlare": "0xcdd1339ae0661d4514ae5661718a87cc673d231bae8cc85fc512ba1d7b6e7e2e",
+      "round": 1399320,
+      "tone": "ok"
+    },
+    {
+      "at": 1784368997,
+      "kind": "drill",
+      "label": "Early-claim drill: blocked on-chain (SilenceNotProven) — funds moved: 0",
+      "tone": "ok"
+    },
+    {
+      "at": 1784369339,
+      "kind": "claim",
+      "label": "Claim requested — asking Flare's network to attest the silence",
+      "tone": "warn"
+    },
+    {
+      "at": 1784369509,
+      "kind": "silence",
+      "label": "Silence attested through 6:08:50 PM",
+      "txFlare": "0x4dee6308e74d79f07d4eb709009001ffdbc6cda387e22d9fbc4db4f6d6155bcf",
+      "round": 1399326,
+      "tone": "warn"
+    },
+    {
+      "at": 1784369514,
+      "kind": "claimStarted",
+      "label": "Claim opened — challenge window running; one owner heartbeat cancels it",
+      "txFlare": "0xcf982f10903860a5d49bcac0d96129fdad10ae6d88065f5f469d4e4012e6bc40",
+      "tone": "warn"
+    },
+    {
+      "at": 1784369823,
+      "kind": "released",
+      "label": "Release executed — redemption request #39635850 for 10.07569 FXRP",
+      "txFlare": "0x39f055c0b07c02daff7e364283e79d98b3d1d58d84069d45a8e72f9e8d83e744",
+      "tone": "gold"
+    },
+    {
+      "at": 1784369870,
+      "kind": "settled",
+      "label": "Redemption #39635850 settled: 10.03 XRP delivered with payment reference 0x464250526641…",
+      "txXrpl": "62367A2025E6EF28F0D2FFF4073838B21508323E2E4EBCE45A6774A763FFBE7A",
+      "tone": "ok"
+    }
+  ]
 }

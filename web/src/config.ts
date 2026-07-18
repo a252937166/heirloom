@@ -12,7 +12,7 @@ export const CONFIG = {
   lotSizeUBA: 10_000_000n,
   api: "/api",
   demo: { heartbeatPeriod: 240, grace: 60, challenge: 120 },
-  storyVault: "0x5655FED767c4315218393c5501c3624917a9BaEB",
+  storyVault: "0x35975770e1eD5431e0bFCaBB238B6188c94AeAdA",
   // Maya's wallet from the case study — a safe default beneficiary for people
   // who are just exploring (payouts to it are visible on the public explorer)
   demoBeneficiary: "rKZo43bi3Vt5ba9gKzUbzMGx4tXV9NUXpq",
