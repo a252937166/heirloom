@@ -201,7 +201,7 @@ describe("HeirloomVault", () => {
       await ethers.provider.send("evm_increaseTime", [201]);
       await expect(vault.executeRelease()).to.emit(vault, "Released");
       expect(await vault.state()).to.equal(5); // Released
-      expect(await am.lastLots()).to.equal(3n);
+      expect(await am.lastAmountUBA()).to.equal(3n * LOT);
       expect(await am.lastUnderlying()).to.equal(BENEFICIARY_XRPL);
       expect(await fxrp.balanceOf(await vault.getAddress())).to.equal(0n);
     });

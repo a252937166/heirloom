@@ -1,12 +1,12 @@
 import { Link, Route, Routes, useLocation } from "react-router-dom";
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { Landing } from "./pages/Landing";
 import { Create } from "./pages/Create";
 import { Vault } from "./pages/Vault";
 import { Claim } from "./pages/Claim";
 import { Kit } from "./pages/Kit";
 import { WalletState, connectWallet } from "./lib/gem";
-import { short } from "./lib/chain";
+import { short, vaultsOfOwner } from "./lib/chain";
 
 const WalletCtx = createContext<{
   wallet: WalletState;
@@ -20,7 +20,14 @@ export default function App() {
   const [wallet, setWallet] = useState<WalletState>({ installed: false, address: null, network: null });
   const [connecting, setConnecting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [myPlans, setMyPlans] = useState<string[]>([]);
+  const [plansOpen, setPlansOpen] = useState(false);
   const loc = useLocation();
+
+  useEffect(() => {
+    if (!wallet.address) return;
+    vaultsOfOwner(wallet.address).then(setMyPlans).catch(() => {});
+  }, [wallet.address]);
   const connect = async () => {
     setConnecting(true);
     setNotice(null);
@@ -53,6 +60,24 @@ export default function App() {
               <Link to="/create" style={{ color: "var(--mist)", fontSize: "0.9rem" }}>
                 Create a plan
               </Link>
+            )}
+            {wallet.address && (
+              <span style={{ position: "relative" }}>
+                <button className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: "0.85rem" }} onClick={() => setPlansOpen((o) => !o)}>
+                  My plans{myPlans.length ? ` (${myPlans.length})` : ""}
+                </button>
+                {plansOpen && (
+                  <div style={{ position: "absolute", right: 0, top: 46, background: "var(--ink-2)", border: "1px solid var(--line)", borderRadius: 12, padding: 10, minWidth: 240, zIndex: 30 }}>
+                    {myPlans.length === 0 && <p style={{ fontSize: "0.8rem", padding: 6 }}>No plans yet — create your first.</p>}
+                    {myPlans.map((p) => (
+                      <Link key={p} to={`/vault/${p}`} onClick={() => setPlansOpen(false)}
+                        style={{ display: "block", padding: "8px 10px", borderRadius: 8, fontSize: "0.8rem" }} className="mono">
+                        {short(p, 10)}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </span>
             )}
             {wallet.address ? (
               <span className="pill gold" title={wallet.address}>

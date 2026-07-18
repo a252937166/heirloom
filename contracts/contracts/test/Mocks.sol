@@ -57,15 +57,23 @@ contract MockAssetManager {
         lotSizeUBA = _lotSizeUBA;
     }
 
-    function redeem(uint256 _lots, string memory _redeemerUnderlyingAddressString, address payable _executor)
+    uint256 public minRedeemUBA = 5_000_000;
+    uint256 public lastAmountUBA;
+
+    function minimumRedeemAmountUBA() external view returns (uint256) {
+        return minRedeemUBA;
+    }
+
+    function redeemAmount(uint256 _amountUBA, string memory _redeemerUnderlyingAddressString, address payable _executor)
         external
         payable
         returns (uint256 _redeemedAmountUBA)
     {
-        lastLots = _lots;
+        require(_amountUBA >= minRedeemUBA, "below minimum");
+        lastAmountUBA = _amountUBA;
         lastUnderlying = _redeemerUnderlyingAddressString;
         lastExecutor = _executor;
-        _redeemedAmountUBA = _lots * lotSizeUBA;
+        _redeemedAmountUBA = _amountUBA;
         // pull the redeemed FXRP from the caller (like burning for redemption)
         fxrp.transferFrom(msg.sender, address(this), _redeemedAmountUBA);
     }

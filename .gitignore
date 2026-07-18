@@ -12,3 +12,4 @@ spike/accounts.secret.json
 *.key
 .DS_Store
 docs/HEIRLOOM-DESIGN.md
+docs/media/

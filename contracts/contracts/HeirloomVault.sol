@@ -10,10 +10,12 @@ import {IReferencedPaymentNonexistence} from "@flarenetwork/flare-periphery-cont
 
 /// @notice Minimal FAssets surface used by the vault (redemption to an XRPL address).
 interface IFAssetRedeemer {
-    function redeem(uint256 _lots, string memory _redeemerUnderlyingAddressString, address payable _executor)
+    function redeemAmount(uint256 _amountUBA, string memory _redeemerUnderlyingAddressString, address payable _executor)
         external
         payable
         returns (uint256 _redeemedAmountUBA);
+
+    function minimumRedeemAmountUBA() external view returns (uint256);
 }
 
 /// @title HeirloomVault — the continuity vault for XRP.
@@ -74,9 +76,10 @@ contract HeirloomVault {
     event ClaimVetoed(uint32 indexed epoch, uint64 ledger);
     event SilenceAttested(uint32 indexed epoch, uint64 fromLedger, uint64 throughLedger, uint64 throughTs);
     event ClaimStarted(string beneficiaryXrpl, uint64 challengeEndsAt);
-    event ReleaseExecuted(uint256 lots, uint256 redeemedUBA, uint256 remainingFxrp);
-    event Released();
-    event CancelExecuted(string ownerXrpl, uint256 lots, uint256 redeemedUBA);
+    event ReleaseExecuted(uint256 requestedUBA, uint256 redeemedUBA, uint256 remainingFxrp);
+    event Released(uint256 residualUBA);
+    event ResidualBelowMinimum(uint256 residualUBA, uint256 protocolMinimumUBA);
+    event CancelExecuted(string ownerXrpl, uint256 requestedUBA, uint256 redeemedUBA);
     event ReserveFunded(address indexed from, uint256 amount);
 
     error BadState(State current);
@@ -200,10 +203,11 @@ contract HeirloomVault {
         emit ClaimStarted(beneficiaryXrpl_, claimChallengeEndsAt);
     }
 
-    /// @notice After the challenge period, redeem the vault's FXRP to the
-    ///         beneficiary's own XRPL address. Re-crankable until all lots are
-    ///         redeemed (FAssets redemptions are asynchronous and may be
-    ///         limited per call).
+    /// @notice After the challenge period, redeem the vault's full FXRP
+    ///         balance to the beneficiary's own XRPL address (arbitrary-amount
+    ///         redemption). Re-crankable: FAssets may fulfil a request only
+    ///         partially (`RedemptionAmountIncomplete`), in which case another
+    ///         crank redeems the remainder.
     function executeRelease() external payable {
         if (state == State.ClaimPending) {
             if (block.timestamp < claimChallengeEndsAt) revert ChallengeNotOver();
@@ -211,14 +215,19 @@ contract HeirloomVault {
         }
         if (state != State.Releasing) revert BadState(state);
 
-        (uint256 lots, uint256 redeemed) = _redeemLots(beneficiaryXrpl);
+        (uint256 requested, uint256 redeemed) = _redeemAll(beneficiaryXrpl);
         uint256 remaining = fxrp.balanceOf(address(this));
-        emit ReleaseExecuted(lots, redeemed, remaining);
-        if (remaining < config.lotSizeUBA) {
-            // sub-lot dust (if any) is unrecoverable via redemption; funding is
-            // enforced in whole lots by the UI/keeper so this is normally zero.
+        emit ReleaseExecuted(requested, redeemed, remaining);
+        if (remaining == 0) {
             state = State.Released;
-            emit Released();
+            emit Released(0);
+        } else if (remaining < assetManager.minimumRedeemAmountUBA()) {
+            // a residual below the protocol's redemption minimum can never be
+            // redeemed; close honestly instead of leaving the state re-crankable
+            // forever. The residual stays visible in the vault.
+            state = State.Released;
+            emit ResidualBelowMinimum(remaining, assetManager.minimumRedeemAmountUBA());
+            emit Released(remaining);
         }
         _payCrank();
     }
@@ -241,8 +250,8 @@ contract HeirloomVault {
         require(bytes32(rb.firstMemoData) == cancelReference, "reference");
 
         state = State.Cancelled;
-        (uint256 lots, uint256 redeemed) = _redeemLots(ownerXrpl_);
-        emit CancelExecuted(ownerXrpl_, lots, redeemed);
+        (uint256 requested, uint256 redeemed) = _redeemAll(ownerXrpl_);
+        emit CancelExecuted(ownerXrpl_, requested, redeemed);
     }
 
     // ---------------------------------------------------------------------
@@ -279,13 +288,12 @@ contract HeirloomVault {
         );
     }
 
-    function _redeemLots(string memory underlying) internal returns (uint256 lots, uint256 redeemedUBA) {
+    function _redeemAll(string memory underlying) internal returns (uint256 requestedUBA, uint256 redeemedUBA) {
         uint256 bal = fxrp.balanceOf(address(this));
-        lots = bal / config.lotSizeUBA;
-        if (lots > 0) {
+        if (bal >= assetManager.minimumRedeemAmountUBA()) {
+            requestedUBA = bal;
             fxrp.forceApprove(address(assetManager), bal);
-            redeemedUBA =
-                assetManager.redeem{value: msg.value}(lots, underlying, payable(msg.sender));
+            redeemedUBA = assetManager.redeemAmount{value: msg.value}(bal, underlying, payable(msg.sender));
         }
     }
 

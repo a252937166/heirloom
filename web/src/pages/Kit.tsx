@@ -1,65 +1,113 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import QRCode from "qrcode";
 import { CONFIG } from "../config";
 import { VaultView, readVault, short } from "../lib/chain";
 
-// Printable Recovery Kit — what the beneficiary needs to claim without help.
+interface Recovery {
+  ownerXrpl: string | null;
+  beneficiaryXrpl: string | null;
+  reference: string | null;
+  beacon: string;
+}
+
+// Printable Recovery Kit — everything the beneficiary needs to claim without
+// our help, and everything anyone needs to rebuild the proofs without our keeper.
 export function Kit() {
   const { address = "" } = useParams();
   const [v, setV] = useState<VaultView | null>(null);
-  useEffect(() => {
-    readVault(address).then(setV).catch(() => {});
-  }, [address]);
-
+  const [rec, setRec] = useState<Recovery | null>(null);
+  const [qr, setQr] = useState<string>("");
   const url = `${window.location.origin}/claim/${address}`;
 
+  useEffect(() => {
+    readVault(address).then(setV).catch(() => {});
+    fetch(`${CONFIG.api}/vaults/${address}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j && setRec(j.recovery))
+      .catch(() => {});
+    QRCode.toDataURL(url, { width: 260, margin: 1, color: { dark: "#0E1526", light: "#FFFFFF" } }).then(setQr).catch(() => {});
+  }, [address, url]);
+
   return (
-    <main className="wrap kit-sheet" style={{ padding: "48px 24px", maxWidth: 680 }}>
-      <div className="no-print" style={{ marginBottom: 24, display: "flex", gap: 12 }}>
+    <main className="wrap kit-sheet" style={{ padding: "44px 24px", maxWidth: 720 }}>
+      <div className="no-print" style={{ marginBottom: 22, display: "flex", gap: 12, flexWrap: "wrap" }}>
         <button className="btn btn-primary" onClick={() => window.print()}>Print / save as PDF</button>
         <span style={{ alignSelf: "center", fontSize: "0.85rem", color: "var(--mist)" }}>
-          Give this sheet to your beneficiary. It contains no keys and moves no money.
+          Give this sheet to your beneficiary — and rehearse the claim once, together, today.
         </span>
       </div>
 
       <div style={{ border: "1px solid var(--line)", borderRadius: 14, padding: 34 }}>
-        <div className="eyebrow">Heirloom · Recovery Kit</div>
-        <h1 style={{ fontSize: "1.8rem", margin: "10px 0 6px" }}>If I go silent, this is yours to use.</h1>
-        <p style={{ fontSize: "0.9rem", marginBottom: 24 }}>
-          Someone chose you as the beneficiary of their XRP continuity vault. Keep this sheet safe. It is not a key
-          and cannot move any funds by itself — it only tells you where and how to claim when the time comes.
-        </p>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 300 }}>
+            <div className="eyebrow">Heirloom · Recovery Kit · {v ? "demo timing (testnet)" : ""}</div>
+            <h1 style={{ fontSize: "1.7rem", margin: "10px 0 6px" }}>If I go silent, this is yours to use.</h1>
+            <p style={{ fontSize: "0.88rem" }}>
+              Someone chose you as the beneficiary of their XRP continuity vault. Keep this sheet safe. It is
+              <strong> not a key</strong> and cannot move funds by itself — funds move only after Flare's
+              network proves the owner's silence and a final challenge window passes.
+            </p>
+          </div>
+          {qr && (
+            <div style={{ textAlign: "center" }}>
+              <img src={qr} alt="Claim page QR" style={{ borderRadius: 10, border: "4px solid #fff" }} />
+              <div className="mono" style={{ fontSize: "0.62rem", marginTop: 6, color: "var(--mist-2)" }}>scan → claim page</div>
+            </div>
+          )}
+        </div>
 
-        <table style={{ width: "100%", fontSize: "0.88rem", borderCollapse: "collapse" }}>
+        <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse", marginTop: 20 }}>
           <tbody>
             {[
-              ["Vault", address],
               ["Claim page", url],
-              ["Network", "Flare Coston2 (testnet demo)"],
-              ["Beneficiary fingerprint", v ? `${v.beneficiaryXrplHash.slice(0, 10)}…${v.beneficiaryXrplHash.slice(-6)}` : "…"],
-              ["Inactivity window", v ? `${Math.round(v.heartbeatPeriod / 60)} minutes + ${Math.round(v.gracePeriod / 60)}m grace (demo timing)` : "…"],
-              ["Safety challenge", v ? `${Math.round(v.challengePeriod / 60)} minutes after a claim starts` : "…"],
+              ["Vault contract", address],
+              ["Network", "Flare Coston2 (chain 114) + XRPL testnet"],
+              ["Owner XRPL address", rec?.ownerXrpl ?? "—"],
+              ["Beneficiary address", rec?.beneficiaryXrpl ?? "(the address the owner chose — yours)"],
+              ["Heartbeat beacon", rec?.beacon ?? CONFIG.beacon],
+              ["Heartbeat reference", rec?.reference ?? "—"],
+              ["Inactivity window", v ? `${Math.round(v.heartbeatPeriod / 60)} min + ${Math.round(v.gracePeriod / 60)} min grace` : "…"],
+              ["Final challenge", v ? `${Math.round(v.challengePeriod / 60)} min after a claim starts` : "…"],
             ].map(([k, val]) => (
               <tr key={k} style={{ borderTop: "1px solid var(--line)" }}>
-                <td style={{ padding: "10px 8px 10px 0", color: "var(--mist)", whiteSpace: "nowrap" }}>{k}</td>
-                <td className="mono" style={{ padding: "10px 0", wordBreak: "break-all" }}>{val}</td>
+                <td style={{ padding: "9px 8px 9px 0", color: "var(--mist)", whiteSpace: "nowrap", verticalAlign: "top" }}>{k}</td>
+                <td className="mono" style={{ padding: "9px 0", wordBreak: "break-all" }}>{val}</td>
               </tr>
             ))}
           </tbody>
         </table>
 
-        <h3 style={{ margin: "26px 0 10px" }}>When the time comes</h3>
-        <ol style={{ fontSize: "0.9rem", color: "var(--mist)", paddingLeft: 20, display: "grid", gap: 8 }}>
-          <li>Open the claim page above from any browser.</li>
-          <li>Enter <strong>your own</strong> XRPL address — the one the owner chose for you.</li>
-          <li>Press "Start claim". Flare's network will check the owner's silence; if they are still active, the claim is refused — that is normal and protective.</li>
-          <li>Wait out the safety challenge shown on screen.</li>
-          <li>Press "Execute release". The XRP arrives on your own wallet — you never hand over keys or install anything.</li>
+        <h3 style={{ margin: "24px 0 10px" }}>When the time comes</h3>
+        <ol style={{ fontSize: "0.88rem", color: "var(--mist)", paddingLeft: 20, display: "grid", gap: 7 }}>
+          <li>Open the claim page (scan the QR above) from any browser.</li>
+          <li>Enter <strong>your own</strong> XRPL address — it must match the one the owner chose.</li>
+          <li>Press "Start the claim". If the owner is still active, it will be refused — that is normal and protective.</li>
+          <li>Wait out the challenge window shown on screen.</li>
+          <li>Press "Execute the release". Native XRP arrives on your own wallet — no keys handed over, nothing to install.</li>
         </ol>
 
-        <p style={{ fontSize: "0.78rem", marginTop: 24, color: "var(--mist-2)" }}>
-          This mechanism transfers control of on-chain funds. It is not a legal will; pair it with proper estate
-          documents. Verify everything yourself: vault {short(address, 8)} on {CONFIG.explorer}.
+        <h3 style={{ margin: "22px 0 10px" }}>Rehearse it now — while they're here</h3>
+        <p style={{ fontSize: "0.85rem", color: "var(--mist)" }}>
+          Open the claim page today and press <em>"Test early-claim protection"</em>. You will watch the network
+          refuse the claim because the owner is alive — so when the day comes, you already know the path.
+          <span className="mono"> Drill completed on: ____ / ____ / ______</span>
+        </p>
+
+        <h3 style={{ margin: "22px 0 10px" }}>If Heirloom itself is gone</h3>
+        <p style={{ fontSize: "0.82rem", color: "var(--mist)" }}>
+          Everything above is enough for any developer to finish the claim without us: the vault contract
+          verifies (1) an FDC <span className="mono">ReferencedPaymentNonexistence</span> proof over the beacon
+          with the heartbeat reference, source-filtered by the owner address, chained from the last heartbeat
+          ledger + 1, and (2) your address preimage. The contract is verified on the explorer; the keeper is
+          open source at <span className="mono">github.com/a252937166/heirloom</span>. Any party may submit the
+          proofs — the vault does not care who cranks it.
+        </p>
+
+        <p style={{ fontSize: "0.75rem", marginTop: 20, color: "var(--mist-2)" }}>
+          This mechanism transfers control of on-chain funds; it is not a legal will — pair it with proper
+          estate documents naming the same beneficiary. Verify everything yourself: vault {short(address, 8)} on{" "}
+          {CONFIG.explorer.replace("https://", "")}.
         </p>
       </div>
     </main>

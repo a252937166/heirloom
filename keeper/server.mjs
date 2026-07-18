@@ -11,12 +11,18 @@
 //   GET  /api/health
 import express from "express";
 import cors from "cors";
-import { Contract, hexlify, randomBytes } from "ethers";
+import { Contract, Interface, hexlify, keccak256, concat, toUtf8Bytes, randomBytes } from "ethers";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import {
   provider, log, sleep, addrHash, agentWallet, validatedLedger, xrplRpc,
-  proveXrpPayment, proveSilence, VAULT_ABI, FACTORY_ABI, XRP_DATA, buildMintMemo,
+  proveXrpPayment, proveSilence, VAULT_ABI, FACTORY_ABI, XRP_DATA, buildMintMemo, DIRECT_MINT_PREFIX,
 } from "../spike/fdc-lib.mjs";
+
+const AM_EVENTS = new Interface([
+  "event RedemptionRequested(address indexed agentVault, address indexed redeemer, uint256 indexed requestId, string paymentAddress, uint256 valueUBA, uint256 feeUBA, uint256 firstUnderlyingBlock, uint256 lastUnderlyingBlock, uint256 lastUnderlyingTimestamp, bytes32 paymentReference, address executor, uint256 executorFeeNatWei)",
+]);
+const cancelRefOf = (heartbeatReference) =>
+  keccak256(concat([toUtf8Bytes("HEIRLOOM/CANCEL"), heartbeatReference]));
 
 const dep = JSON.parse(readFileSync(new URL("../contracts/deployments.real.json", import.meta.url), "utf8"));
 const BEACON = "r4vEYPxYkEWzoEySUETDRgnUKu8GG9b1GN";
@@ -156,13 +162,21 @@ app.post("/api/vaults/:addr/heartbeat", async (req, res) => {
 
 app.post("/api/vaults/:addr/claim", async (req, res) => {
   const { addr } = req.params;
-  const { beneficiaryXrpl } = req.body ?? {};
+  const { beneficiaryXrpl, ownerXrpl: ownerFromBody } = req.body ?? {};
   if (!beneficiaryXrpl) return res.status(400).send("beneficiaryXrpl required");
   try {
     const v = vaultAt(addr);
     const meta = metaOf(addr);
-    const ownerXrpl = meta.ownerXrpl;
-    if (!ownerXrpl) return res.status(400).send("keeper does not know this vault's owner address");
+    // the Recovery Kit carries the owner address so a claim never depends on
+    // this keeper's private state
+    const ownerXrpl = meta.ownerXrpl ?? ownerFromBody;
+    if (!ownerXrpl) {
+      return res.status(400).send("ownerXrpl required (printed on the Recovery Kit) — this keeper has no record of it");
+    }
+    if (addrHash(ownerXrpl) !== (await v.config()).ownerXrplHash) {
+      return res.status(400).send("ownerXrpl does not match this vault's owner hash");
+    }
+    if (!meta.ownerXrpl) { meta.ownerXrpl = ownerXrpl; persist(); }
     await runJob(addr, "claim", async () => {
       const deadline = Number(await v.silenceDeadline());
       const proven = Number(await v.silenceProvenThroughTs());
@@ -196,25 +210,53 @@ app.post("/api/vaults/:addr/release", async (req, res) => {
       const v = vaultAt(addr);
       const meta = metaOf(addr);
       const beneficiary = meta.beneficiaryXrpl ?? (await v.beneficiaryXrpl());
-      const before = beneficiary ? BigInt((await xrplRpc("account_info", { account: beneficiary, ledger_index: "validated" })).result?.account_data?.Balance ?? 0) : 0n;
       const tx = await v.executeRelease();
-      await tx.wait();
-      rec(addr, "released", "Release executed — FAssets redemption started to the beneficiary's XRPL wallet", { txFlare: tx.hash, tone: "gold" });
-      if (!beneficiary) return;
-      for (let i = 0; i < 80; i++) {
+      const rc = await tx.wait();
+      // bind the payout to the ACTUAL redemption request, not a balance change
+      const reqs = [];
+      for (const lg of rc.logs) {
+        try {
+          const p = AM_EVENTS.parseLog(lg);
+          if (p?.name === "RedemptionRequested") {
+            reqs.push({
+              requestId: String(p.args.requestId),
+              paymentReference: p.args.paymentReference.toLowerCase(),
+              valueUBA: String(p.args.valueUBA),
+              feeUBA: String(p.args.feeUBA),
+              agentVault: p.args.agentVault,
+            });
+          }
+        } catch {}
+      }
+      meta.redemptions = reqs;
+      persist();
+      rec(addr, "released",
+        `Release executed — redemption request${reqs.length > 1 ? "s" : ""} ${reqs.map((r) => "#" + r.requestId).join(", ")} for ${reqs.reduce((s, r) => s + Number(r.valueUBA), 0) / 1e6} FXRP`,
+        { txFlare: tx.hash, tone: "gold" });
+      if (!beneficiary || reqs.length === 0) return;
+      const wanted = new Set(reqs.map((r) => r.paymentReference));
+      for (let i = 0; i < 80 && wanted.size; i++) {
         await sleep(15_000);
-        const ai = await xrplRpc("account_info", { account: beneficiary, ledger_index: "validated" });
-        const bal = BigInt(ai.result?.account_data?.Balance ?? 0);
-        if (bal > before) {
-          const at = await xrplRpc("account_tx", { account: beneficiary, limit: 5 });
-          const ptx = at.result.transactions?.find((t) => (t.tx_json ?? t.tx)?.Destination === beneficiary);
-          rec(addr, "settled", `Beneficiary received ${(Number(bal - before) / 1e6).toFixed(2)} XRP on their own wallet`, {
-            txXrpl: ptx ? (ptx.tx_json ?? ptx.tx)?.hash ?? ptx.hash : undefined, tone: "ok",
-          });
-          return;
+        const at = await xrplRpc("account_tx", { account: beneficiary, limit: 15 });
+        for (const t of at.result?.transactions ?? []) {
+          const txj = t.tx_json ?? t.tx;
+          if (!txj || txj.Destination !== beneficiary) continue;
+          const memo = txj.Memos?.[0]?.Memo?.MemoData?.toLowerCase();
+          if (!memo) continue;
+          const ref = "0x" + memo;
+          if (wanted.has(ref)) {
+            wanted.delete(ref);
+            const r = reqs.find((x) => x.paymentReference === ref);
+            const delivered = (t.meta ?? t.metaData)?.delivered_amount ?? txj.Amount;
+            rec(addr, "settled",
+              `Redemption #${r.requestId} settled: ${(Number(delivered) / 1e6).toFixed(2)} XRP delivered with payment reference ${ref.slice(0, 14)}…`,
+              { txXrpl: txj.hash ?? t.hash, tone: "ok" });
+          }
         }
       }
-      rec(addr, "settling", "Redemption still settling on XRPL (agent payment window)", { tone: "warn" });
+      if (wanted.size) rec(addr, "settling", "Redemption payment(s) still inside the agent window — tracking by payment reference", { tone: "warn" });
+      const residual = Number(await fxrp.balanceOf(addr)) / 1e6;
+      if (residual > 0) rec(addr, "residual", `Residual ${residual} FXRP remains (below the protocol redemption minimum)`, { tone: "warn" });
     });
     res.json({ ok: true, job: "release" });
   } catch (e) {
@@ -222,10 +264,33 @@ app.post("/api/vaults/:addr/release", async (req, res) => {
   }
 });
 
+// cancel: returns the exact XRPL payment the owner signs; detection is automatic
+app.post("/api/vaults/:addr/cancel-intent", async (req, res) => {
+  try {
+    const v = vaultAt(req.params.addr);
+    const cfg = await v.config();
+    res.json({
+      beacon: BEACON,
+      amountDrops: "1",
+      memoHex: cancelRefOf(cfg.heartbeatReference).slice(2),
+      note: "Send 1 drop to the beacon with this memo from the owner wallet; the keeper proves it and the vault redeems everything back to you.",
+    });
+  } catch (e) {
+    res.status(500).send(e.shortMessage ?? e.message);
+  }
+});
+
 app.get("/api/vaults/:addr", (req, res) => {
   const v = store.vaults[req.params.addr.toLowerCase()] ?? { events: [], meta: {} };
   const job = jobs.get(req.params.addr.toLowerCase());
-  res.json({ events: v.events, job: job ? { name: job.name, startedAt: job.startedAt } : null });
+  // public recovery data: enough for anyone to rebuild every proof without this
+  // keeper (the owner's address is public on XRPL after the first heartbeat)
+  const { ownerXrpl, beneficiaryXrpl, reference } = v.meta ?? {};
+  res.json({
+    events: v.events,
+    job: job ? { name: job.name, startedAt: job.startedAt } : null,
+    recovery: { ownerXrpl: ownerXrpl ?? null, beneficiaryXrpl: beneficiaryXrpl ?? null, reference: reference ?? null, beacon: BEACON },
+  });
 });
 
 // --- beacon auto-scan: detect heartbeats for known vaults without any POST ----
@@ -238,8 +303,36 @@ async function beaconScan() {
       const memo = tx.Memos?.[0]?.Memo?.MemoData?.toLowerCase();
       if (!memo || memo.length !== 64) continue;
       const ref = "0x" + memo;
-      const vaultAddr = await factory.vaultByReference(ref);
+      let vaultAddr = await factory.vaultByReference(ref);
+      let isCancel = false;
+      if (!vaultAddr || vaultAddr === "0x0000000000000000000000000000000000000000") {
+        // not a heartbeat — maybe a cancel command (keccak("HEIRLOOM/CANCEL"‖ref))
+        for (const [k, sv] of Object.entries(store.vaults)) {
+          const r = sv.meta?.reference;
+          if (r && cancelRefOf(r).toLowerCase() === ref) { vaultAddr = sv.meta.vaultAddr ?? k; isCancel = true; break; }
+        }
+      }
       if (!vaultAddr || vaultAddr === "0x0000000000000000000000000000000000000000") continue;
+      if (isCancel) {
+        const key2 = vaultAddr.toLowerCase();
+        const seen2 = ((store.vaults[key2] ??= { events: [], meta: {} }).meta.seenHb ??= []);
+        const hash2 = tx.hash ?? t.hash;
+        if (seen2.includes(hash2)) continue;
+        seen2.push(hash2); persist();
+        if (!jobs.get(key2)) {
+          runJob(vaultAddr, "cancel", async () => {
+            rec(vaultAddr, "cancelSeen", "Cancel command detected on the beacon — proving it", { txXrpl: hash2, tone: "warn" });
+            const proof = await proveXrpPayment(agent, hash2);
+            const v = vaultAt(vaultAddr);
+            const ownerXrpl = store.vaults[key2]?.meta?.ownerXrpl;
+            if (!ownerXrpl) throw new Error("owner address unknown; cancel via Recovery Kit data");
+            const ctx = await v.cancel(ownerXrpl, proof);
+            await ctx.wait();
+            rec(vaultAddr, "cancelled", "Plan cancelled — the vault is redeeming everything back to the owner's XRPL wallet", { txFlare: ctx.hash, tone: "gold" });
+          }).catch(() => {});
+        }
+        continue;
+      }
       const key = vaultAddr.toLowerCase();
       const seen = ((store.vaults[key] ??= { events: [], meta: {} }).meta.seenHb ??= []);
       const hash = tx.hash ?? t.hash;
@@ -274,6 +367,61 @@ async function beaconScan() {
   }
 }
 setInterval(beaconScan, 30_000);
+
+// --- core-vault funding scan: manual payers need no tx-hash paperwork --------
+async function fundingScan() {
+  try {
+    const at = await xrplRpc("account_tx", { account: dep.coreVaultXrpl, limit: 25 });
+    for (const t of at.result?.transactions ?? []) {
+      const tx = t.tx_json ?? t.tx;
+      if (!tx || tx.TransactionType !== "Payment" || tx.Destination !== dep.coreVaultXrpl) continue;
+      const memo = tx.Memos?.[0]?.Memo?.MemoData?.toLowerCase();
+      if (!memo || !memo.startsWith(DIRECT_MINT_PREFIX.toLowerCase())) continue;
+      const recipient = "0x" + memo.slice(DIRECT_MINT_PREFIX.length + 8);
+      const key = recipient.toLowerCase();
+      const known = store.vaults[key];
+      if (!known) continue; // not one of our vaults
+      const hash = tx.hash ?? t.hash;
+      const seen = (known.meta.seenFunding ??= []);
+      if (seen.includes(hash)) continue;
+      seen.push(hash); persist();
+      const v = vaultAt(recipient);
+      if (Number(await v.state()) !== 1) continue; // only PendingFunding vaults
+      if (!jobs.get(key)) {
+        runJob(recipient, "funding-auto", async () => {
+          rec(recipient, "funding", "Funding payment detected on the core vault — proving it to Flare (FDC XRPPayment)", { txXrpl: hash });
+          let bal = await fxrp.balanceOf(recipient);
+          if (bal === 0n) {
+            try {
+              const proof = await proveXrpPayment(agent, hash);
+              bal = await fxrp.balanceOf(recipient);
+              if (bal === 0n) {
+                const mtx = await assetManager.executeDirectMinting({ merkleProof: proof.merkleProof, data: proof.data });
+                await mtx.wait();
+                bal = await fxrp.balanceOf(recipient);
+                rec(recipient, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP`, { txFlare: mtx.hash, round: proof.meta.round, tone: "ok" });
+              }
+            } catch (e) {
+              bal = await fxrp.balanceOf(recipient);
+              if (bal === 0n) throw e;
+            }
+          }
+          if (bal > 0n && !(store.vaults[key]?.events ?? []).some((ev) => ev.kind === "minted")) {
+            rec(recipient, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP (executed by a network executor)`, { tone: "ok" });
+          }
+          if (Number(await v.state()) === 1) {
+            const atx = await v.activate();
+            await atx.wait();
+            rec(recipient, "active", "Vault is ACTIVE — the dial is live", { txFlare: atx.hash, tone: "ok" });
+          }
+        }).catch(() => {});
+      }
+    }
+  } catch (e) {
+    log(`fundingScan: ${e.message?.slice(0, 80)}`);
+  }
+}
+setInterval(fundingScan, 30_000);
 
 const PORT = process.env.PORT ?? 8787;
 app.listen(PORT, () => log(`heirloom keeper listening on :${PORT} (factory ${dep.factory})`));
