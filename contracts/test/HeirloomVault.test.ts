@@ -20,6 +20,7 @@ const CFG = {
   creationLedger: 1000n,
   creationTs: 1_000_000n,
   lotSizeUBA: LOT,
+  ownerEvm: ethers.ZeroAddress,
 };
 
 function xrpPaymentProof(over: Partial<Record<string, unknown>> = {}) {
@@ -236,6 +237,55 @@ describe("HeirloomVault", () => {
     it("rejects cancel with heartbeat reference or wrong preimage", async () => {
       await expect(vault.cancel(OWNER_XRPL, xrpPaymentProof())).to.be.revertedWith("reference");
       await expect(vault.cancel("rWrong", xrpPaymentProof())).to.be.revertedWithCustomError(vault, "BadPreimage");
+    });
+  });
+
+  describe("EVM-owner mode (MetaMask/OKX)", () => {
+    let v4: HeirloomVault;
+    let ownerEvm: Awaited<ReturnType<typeof ethers.getSigners>>[0];
+    let stranger: Awaited<ReturnType<typeof ethers.getSigners>>[0];
+
+    beforeEach(async () => {
+      [ownerEvm, stranger] = await ethers.getSigners();
+      const cfg = { ...CFG, ownerXrplHash: ethers.ZeroHash, ownerEvm: ownerEvm.address, heartbeatReference: ethers.hexlify(ethers.randomBytes(32)) };
+      const tx = await factory.createVault(cfg, 0n);
+      const rc = await tx.wait();
+      const ev = rc!.logs.map((l) => factory.interface.parseLog(l)).find((p) => p?.name === "VaultCreated");
+      v4 = await ethers.getContractAt("HeirloomVault", ev!.args.vault);
+      await fxrp.mint(await v4.getAddress(), 2n * LOT);
+      await v4.activate();
+    });
+
+    it("one-click heartbeat resets the clock; strangers rejected; XRPL paths disabled", async () => {
+      await expect(v4.connect(ownerEvm).heartbeatEvm()).to.emit(v4, "Heartbeat");
+      expect(await v4.heartbeatEpoch()).to.equal(1);
+      await expect(v4.connect(stranger).heartbeatEvm()).to.be.revertedWithCustomError(v4, "NotOwnerHeartbeat");
+      await expect(v4.recordHeartbeat(xrpPaymentProof())).to.be.revertedWith("evm mode");
+      await expect(v4.attestSilence(rpnProof(1001n, 1300n, 1_000_400n))).to.be.revertedWith("evm mode");
+    });
+
+    it("claim gated by consensus time; challenge veto works; release pays out", async () => {
+      await expect(v4.startClaim(BENEFICIARY_XRPL)).to.be.revertedWithCustomError(v4, "SilenceNotProven");
+      await ethers.provider.send("evm_increaseTime", [1101]); // period 1000 + grace 100
+      await ethers.provider.send("evm_mine", []);
+      await v4.startClaim(BENEFICIARY_XRPL);
+      expect(await v4.state()).to.equal(3);
+      await expect(v4.connect(ownerEvm).heartbeatEvm()).to.emit(v4, "ClaimVetoed");
+      expect(await v4.state()).to.equal(2);
+      await ethers.provider.send("evm_increaseTime", [1101]);
+      await ethers.provider.send("evm_mine", []);
+      await v4.startClaim(BENEFICIARY_XRPL);
+      await ethers.provider.send("evm_increaseTime", [201]);
+      await expect(v4.executeRelease()).to.emit(v4, "Released");
+      expect(await am.lastUnderlying()).to.equal(BENEFICIARY_XRPL);
+    });
+
+    it("cancelEvm hands the FXRP back to the EVM owner", async () => {
+      const before = await fxrp.balanceOf(ownerEvm.address);
+      await v4.connect(ownerEvm).cancelEvm();
+      expect(await v4.state()).to.equal(6);
+      expect((await fxrp.balanceOf(ownerEvm.address)) - before).to.equal(2n * LOT);
+      await expect(v4.connect(stranger).cancelEvm()).to.be.revertedWithCustomError(v4, "BadState");
     });
   });
 

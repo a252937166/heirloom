@@ -247,6 +247,26 @@ export async function proveSilence(signer, { beacon, reference, ownerAddress, mi
 export const DIRECT_MINT_PREFIX = "4642505266410018";
 export const buildMintMemo = (recipientEvm) => DIRECT_MINT_PREFIX + "00000000" + recipientEvm.slice(2).toLowerCase();
 
+// v2 vaults predate the EVM-owner field; decode them tolerantly so old
+// (already-completed) vaults stay first-class citizens.
+const CONFIG_V2 = "function config() view returns (bytes32 ownerXrplHash, bytes32 beneficiaryXrplHash, bytes32 beaconHash, bytes32 heartbeatReference, uint64 heartbeatPeriod, uint64 gracePeriod, uint64 challengePeriod, uint64 creationLedger, uint64 creationTs, uint256 lotSizeUBA)";
+export async function vaultConfig(v) {
+  try {
+    return await v.config();
+  } catch {
+    const legacy = new Contract(await v.getAddress(), [CONFIG_V2], v.runner ?? provider);
+    const c = await legacy.config();
+    return {
+      ownerXrplHash: c.ownerXrplHash, beneficiaryXrplHash: c.beneficiaryXrplHash,
+      beaconHash: c.beaconHash, heartbeatReference: c.heartbeatReference,
+      heartbeatPeriod: c.heartbeatPeriod, gracePeriod: c.gracePeriod,
+      challengePeriod: c.challengePeriod, creationLedger: c.creationLedger,
+      creationTs: c.creationTs, lotSizeUBA: c.lotSizeUBA,
+      ownerEvm: "0x0000000000000000000000000000000000000000",
+    };
+  }
+}
+
 export const VAULT_ABI = [
   `function recordHeartbeat(tuple(bytes32[] merkleProof, ${XRP_DATA} data) proof)`,
   `function attestSilence(tuple(bytes32[] merkleProof, ${RPN_DATA} data) proof)`,
@@ -263,10 +283,10 @@ export const VAULT_ABI = [
   "function heartbeatEpoch() view returns (uint32)",
   "function silenceDeadline() view returns (uint64)",
   "function beneficiaryXrpl() view returns (string)",
-  "function config() view returns (bytes32 ownerXrplHash, bytes32 beneficiaryXrplHash, bytes32 beaconHash, bytes32 heartbeatReference, uint64 heartbeatPeriod, uint64 gracePeriod, uint64 challengePeriod, uint64 creationLedger, uint64 creationTs, uint256 lotSizeUBA)",
+  "function config() view returns (bytes32 ownerXrplHash, bytes32 beneficiaryXrplHash, bytes32 beaconHash, bytes32 heartbeatReference, uint64 heartbeatPeriod, uint64 gracePeriod, uint64 challengePeriod, uint64 creationLedger, uint64 creationTs, uint256 lotSizeUBA, address ownerEvm)",
 ];
 export const FACTORY_ABI = [
-  "function createVault((bytes32,bytes32,bytes32,bytes32,uint64,uint64,uint64,uint64,uint64,uint256) c, uint256 crankRewardWei) payable returns (address)",
+  "function createVault((bytes32,bytes32,bytes32,bytes32,uint64,uint64,uint64,uint64,uint64,uint256,address) c, uint256 crankRewardWei) payable returns (address)",
   "function vaultCount() view returns (uint256)",
   "function vaultByReference(bytes32) view returns (address)",
   "event VaultCreated(address indexed vault, uint256 indexed index, bytes32 ownerXrplHash, bytes32 beneficiaryXrplHash, bytes32 heartbeatReference, uint64 heartbeatPeriod, uint64 gracePeriod, uint64 challengePeriod)",

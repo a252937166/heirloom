@@ -6,7 +6,7 @@ export const addrHash = (r: string) => keccak256(toUtf8Bytes(r));
 
 const VAULT_ABI = [
   "function state() view returns (uint8)",
-  "function config() view returns (bytes32 ownerXrplHash, bytes32 beneficiaryXrplHash, bytes32 beaconHash, bytes32 heartbeatReference, uint64 heartbeatPeriod, uint64 gracePeriod, uint64 challengePeriod, uint64 creationLedger, uint64 creationTs, uint256 lotSizeUBA)",
+  "function config() view returns (bytes32 ownerXrplHash, bytes32 beneficiaryXrplHash, bytes32 beaconHash, bytes32 heartbeatReference, uint64 heartbeatPeriod, uint64 gracePeriod, uint64 challengePeriod, uint64 creationLedger, uint64 creationTs, uint256 lotSizeUBA, address ownerEvm)",
   "function lastHeartbeatTs() view returns (uint64)",
   "function lastHeartbeatLedger() view returns (uint64)",
   "function heartbeatEpoch() view returns (uint32)",
@@ -45,13 +45,35 @@ export interface VaultView {
   nextSilenceLedger: number;
   ownerXrplHash: string;
   beneficiaryXrplHash: string;
+  ownerEvm: string;
+}
+
+// v2 vaults predate the EVM-owner field — decode their config tolerantly so
+// already-completed plans stay first-class citizens.
+const CONFIG_V2_ABI = [
+  "function config() view returns (bytes32 ownerXrplHash, bytes32 beneficiaryXrplHash, bytes32 beaconHash, bytes32 heartbeatReference, uint64 heartbeatPeriod, uint64 gracePeriod, uint64 challengePeriod, uint64 creationLedger, uint64 creationTs, uint256 lotSizeUBA)",
+];
+async function readConfig(address: string) {
+  try {
+    return await vaultAt(address).config();
+  } catch {
+    const c = await new Contract(address, CONFIG_V2_ABI, provider).config();
+    return {
+      ownerXrplHash: c.ownerXrplHash, beneficiaryXrplHash: c.beneficiaryXrplHash,
+      beaconHash: c.beaconHash, heartbeatReference: c.heartbeatReference,
+      heartbeatPeriod: c.heartbeatPeriod, gracePeriod: c.gracePeriod,
+      challengePeriod: c.challengePeriod, creationLedger: c.creationLedger,
+      creationTs: c.creationTs, lotSizeUBA: c.lotSizeUBA,
+      ownerEvm: "0x0000000000000000000000000000000000000000",
+    };
+  }
 }
 
 export async function readVault(address: string): Promise<VaultView> {
   const v = vaultAt(address);
   const [state, cfg, lastTs, proven, deadline, challenge, epoch, nextLedger, bal] = await Promise.all([
     v.state(),
-    v.config(),
+    readConfig(address),
     v.lastHeartbeatTs(),
     v.silenceProvenThroughTs(),
     v.silenceDeadline(),
@@ -76,6 +98,7 @@ export async function readVault(address: string): Promise<VaultView> {
     nextSilenceLedger: Number(nextLedger),
     ownerXrplHash: cfg.ownerXrplHash,
     beneficiaryXrplHash: cfg.beneficiaryXrplHash,
+    ownerEvm: cfg.ownerEvm,
   };
 }
 

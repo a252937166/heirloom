@@ -5,6 +5,9 @@ import { CONFIG } from "../config";
 import { VaultView, fmtFxrp, readVault, short } from "../lib/chain";
 import { useWallet } from "../App";
 import { payWithMemo } from "../lib/gem";
+import { cancelEvmTx, friendlyEvmError, heartbeatEvmTx } from "../lib/evm";
+
+const ZERO_EVM = "0x0000000000000000000000000000000000000000";
 
 export interface KeeperEvent {
   at: number;
@@ -89,6 +92,16 @@ export function Vault() {
     if (!v) return;
     setBusy(true); setErr(null); setNote(null);
     try {
+      if (v.ownerEvm !== ZERO_EVM) {
+        // EVM-owner plan: the check-in IS the transaction — no proof round-trip needed
+        const hash = await heartbeatEvmTx(address);
+        setNote(`Checked in (${short(hash, 8)}). The dial reset instantly — consensus time is the clock.`);
+        fetch(`${CONFIG.api}/vaults/${address}/heartbeat`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ evmTx: hash }),
+        }).catch(() => {});
+        await refresh();
+        return;
+      }
       const hash = await payWithMemo({ destination: CONFIG.beacon, amountDrops: "1", memoHex: v.heartbeatReference.slice(2) });
       if (!hash) throw new Error("The wallet rejected the payment.");
       setNote(`Heartbeat sent (${short(hash, 8)}). Flare is proving it — the dial resets in about two minutes.`);
@@ -96,12 +109,13 @@ export function Vault() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ xrplTx: hash }),
       });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(v.ownerEvm !== ZERO_EVM ? friendlyEvmError(e) : e instanceof Error ? e.message : String(e));
     } finally { setBusy(false); }
   }
 
   async function openCancel() {
     setCancelOpen(true);
+    if (v && v.ownerEvm !== ZERO_EVM) return; // EVM plans cancel with one wallet transaction
     if (!cancelIntent) {
       const r = await fetch(`${CONFIG.api}/vaults/${address}/cancel-intent`, { method: "POST" });
       if (r.ok) setCancelIntent(await r.json());
@@ -109,15 +123,22 @@ export function Vault() {
   }
 
   async function cancelWithWallet() {
-    if (!cancelIntent) return;
     setBusy(true); setErr(null);
     try {
+      if (v && v.ownerEvm !== ZERO_EVM) {
+        const hash = await cancelEvmTx(address);
+        setNote(`Plan cancelled (${short(hash, 8)}). The vault handed all FXRP back to your wallet.`);
+        setCancelOpen(false);
+        await refresh();
+        return;
+      }
+      if (!cancelIntent) return;
       const hash = await payWithMemo({ destination: cancelIntent.beacon, amountDrops: "1", memoHex: cancelIntent.memoHex });
       if (!hash) throw new Error("The wallet rejected the payment.");
       setNote(`Cancel command sent (${short(hash, 8)}). The keeper proves it, then the vault redeems everything back to you.`);
       setCancelOpen(false);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(v && v.ownerEvm !== ZERO_EVM ? friendlyEvmError(e) : e instanceof Error ? e.message : String(e));
     } finally { setBusy(false); }
   }
 
@@ -133,6 +154,7 @@ export function Vault() {
   const dueSoon = v.state === 2 && v.silenceDeadline - now < v.heartbeatPeriod * 0.25;
   const head = HEADLINES[v.state] ?? { title: "Continuity plan", sub: "" };
   const tone = v.state === 2 ? (dueSoon ? "warn" : "alive") : v.state === 3 || v.state === 4 ? "warn" : "gold";
+  const isEvmPlan = v.ownerEvm !== ZERO_EVM;
 
   return (
     <main className="wrap" style={{ padding: "44px 24px" }}>
@@ -154,10 +176,15 @@ export function Vault() {
             label={v.state === 1 ? "waiting for funding" : v.state === 3 ? "challenge — one heartbeat vetoes" : undefined} />
           {v.state <= 3 && (
             <div style={{ marginTop: 18, display: "grid", gap: 10, justifyItems: "center" }}>
-              <button className="btn btn-primary" disabled={busy || !wallet.address} onClick={heartbeat}>
-                {busy ? "Confirm in wallet…" : v.state === 3 ? "Veto the claim — I'm here" : dueSoon ? "Check in now" : "I'm here — send heartbeat"}
+              <button className="btn btn-primary" disabled={busy || (!isEvmPlan && !wallet.address)} onClick={heartbeat}>
+                {busy ? "Confirm in wallet…" : v.state === 3 ? "Veto the claim — I'm here" : dueSoon ? "Check in now" : isEvmPlan ? "I'm here — check in" : "I'm here — send heartbeat"}
               </button>
-              {!wallet.address && (
+              {isEvmPlan ? (
+                <p className="hint" style={{ fontSize: "0.75rem", color: "var(--mist-2)", maxWidth: 280 }}>
+                  One click in MetaMask/OKX — we connect and add Coston2 automatically. Gas is free testnet
+                  C2FLR: <a href="https://faucet.flare.network/coston2" target="_blank" rel="noreferrer">faucet ↗</a>
+                </p>
+              ) : !wallet.address && (
                 <p className="hint" style={{ fontSize: "0.75rem", color: "var(--mist-2)", maxWidth: 260 }}>
                   Connect GemWallet, or send 1 drop to the beacon with your reference memo from any wallet.
                 </p>
@@ -195,6 +222,21 @@ export function Vault() {
           {cancelOpen && (
             <div className="card" style={{ marginTop: 16, borderColor: "color-mix(in srgb, var(--ember) 45%, transparent)" }}>
               <h3 style={{ marginBottom: 8 }}>Cancel this plan</h3>
+              {isEvmPlan ? (
+                <>
+                  <p style={{ fontSize: "0.9rem", marginBottom: 12 }}>
+                    Cancelling is one owner-signed transaction: your connected wallet calls{" "}
+                    <span className="mono">cancelEvm()</span> and the vault hands every FXRP back to your
+                    account. Nobody else can trigger it — the contract checks the caller is the owner.
+                  </p>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button className="btn btn-primary" disabled={busy} onClick={cancelWithWallet}>
+                      {busy ? "Confirm in wallet…" : "Cancel with MetaMask / OKX"}
+                    </button>
+                    <button className="btn btn-ghost" onClick={() => setCancelOpen(false)}>Keep the plan</button>
+                  </div>
+                </>
+              ) : (<>
               <p style={{ fontSize: "0.9rem", marginBottom: 12 }}>
                 Cancelling is an owner-signed XRPL action: send <strong>1 drop</strong> to the beacon with your
                 plan's cancel memo. The keeper proves it, and the vault redeems everything back to
@@ -219,6 +261,7 @@ export function Vault() {
               ) : (
                 <p className="mono" style={{ fontSize: "0.75rem" }}>loading cancel instructions…</p>
               )}
+              </>)}
             </div>
           )}
 

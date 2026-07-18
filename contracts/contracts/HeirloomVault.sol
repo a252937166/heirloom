@@ -40,16 +40,18 @@ contract HeirloomVault {
     }
 
     struct Config {
-        bytes32 ownerXrplHash; // standard address hash = keccak256(owner r-address string)
+        bytes32 ownerXrplHash; // standard address hash = keccak256(owner r-address string); zero in EVM mode
         bytes32 beneficiaryXrplHash; // keccak256(beneficiary r-address string)
         bytes32 beaconHash; // keccak256(global heartbeat beacon r-address string)
-        bytes32 heartbeatReference; // 32-byte standard payment reference for heartbeats
+        bytes32 heartbeatReference; // 32-byte standard payment reference (also the vault's unique id)
         uint64 heartbeatPeriod; // seconds owner may stay silent
         uint64 gracePeriod; // extra seconds before a claim may start
         uint64 challengePeriod; // seconds a pending claim can be vetoed by a heartbeat
         uint64 creationLedger; // XRPL validated ledger at creation (silence anchor #0)
         uint64 creationTs; // its close time (unix)
         uint256 lotSizeUBA; // FAssets lot size, cached at creation
+        address ownerEvm; // non-zero → EVM-owner mode: heartbeats are contract calls,
+        //                   silence is measured by EVM consensus time (no FDC needed)
     }
 
     // --- immutable-per-deployment (implementation constructor) ---
@@ -99,14 +101,20 @@ contract HeirloomVault {
 
     function initialize(Config calldata c, uint256 _crankRewardWei) external payable {
         if (state != State.Uninitialized) revert BadState(state);
-        require(c.ownerXrplHash != 0 && c.beneficiaryXrplHash != 0 && c.beaconHash != 0, "cfg");
+        require(c.ownerXrplHash != 0 || c.ownerEvm != address(0), "owner");
+        require(c.beneficiaryXrplHash != 0 && c.beaconHash != 0, "cfg");
         require(c.heartbeatReference != 0 && c.heartbeatPeriod > 0, "cfg");
         config = c;
         cancelReference = keccak256(abi.encodePacked("HEIRLOOM/CANCEL", c.heartbeatReference));
-        lastHeartbeatLedger = c.creationLedger;
-        lastHeartbeatTs = c.creationTs;
-        nextSilenceLedger = c.creationLedger + 1;
-        silenceProvenThroughTs = c.creationTs;
+        if (c.ownerEvm != address(0)) {
+            // EVM mode: consensus time is the silence oracle
+            lastHeartbeatTs = uint64(block.timestamp);
+        } else {
+            lastHeartbeatLedger = c.creationLedger;
+            lastHeartbeatTs = c.creationTs;
+            nextSilenceLedger = c.creationLedger + 1;
+            silenceProvenThroughTs = c.creationTs;
+        }
         crankRewardWei = _crankRewardWei;
         state = State.PendingFunding;
     }
@@ -133,10 +141,40 @@ contract HeirloomVault {
     // heartbeat (positive leg) — also the claim veto
     // ---------------------------------------------------------------------
 
+    /// @notice EVM-mode heartbeat: the owner checks in with one contract call.
+    ///         Consensus time is the silence oracle — no proof needed.
+    function heartbeatEvm() external {
+        if (state != State.Active && state != State.ClaimPending && state != State.PendingFunding) {
+            revert BadState(state);
+        }
+        if (config.ownerEvm == address(0) || msg.sender != config.ownerEvm) revert NotOwnerHeartbeat();
+        lastHeartbeatTs = uint64(block.timestamp);
+        heartbeatEpoch += 1;
+        if (state == State.ClaimPending) {
+            state = State.Active;
+            claimChallengeEndsAt = 0;
+            emit ClaimVetoed(heartbeatEpoch, 0);
+        }
+        emit Heartbeat(heartbeatEpoch, 0, uint64(block.timestamp), bytes32(0));
+    }
+
+    /// @notice EVM-mode cancel: the owner takes the FXRP back to their own address.
+    function cancelEvm() external {
+        if (state != State.PendingFunding && state != State.Active && state != State.ClaimPending) {
+            revert BadState(state);
+        }
+        if (config.ownerEvm == address(0) || msg.sender != config.ownerEvm) revert NotOwnerHeartbeat();
+        state = State.Cancelled;
+        uint256 bal = fxrp.balanceOf(address(this));
+        if (bal > 0) fxrp.safeTransfer(config.ownerEvm, bal);
+        emit CancelExecuted("", bal, bal);
+    }
+
     function recordHeartbeat(IXRPPayment.Proof calldata proof) external {
         if (state != State.Active && state != State.ClaimPending && state != State.PendingFunding) {
             revert BadState(state);
         }
+        require(config.ownerEvm == address(0), "evm mode");
         if (!_verification().verifyXRPPayment(proof)) revert ProofInvalid();
         IXRPPayment.ResponseBody calldata rb = proof.data.responseBody;
         if (rb.sourceAddressHash != config.ownerXrplHash) revert NotOwnerHeartbeat();
@@ -167,6 +205,7 @@ contract HeirloomVault {
 
     function attestSilence(IReferencedPaymentNonexistence.Proof calldata proof) external {
         if (state != State.Active && state != State.ClaimPending) revert BadState(state);
+        require(config.ownerEvm == address(0), "evm mode");
         if (!_verification().verifyReferencedPaymentNonexistence(proof)) revert ProofInvalid();
         IReferencedPaymentNonexistence.RequestBody calldata req = proof.data.requestBody;
         IReferencedPaymentNonexistence.ResponseBody calldata res = proof.data.responseBody;
@@ -194,7 +233,12 @@ contract HeirloomVault {
     function startClaim(string calldata beneficiaryXrpl_) external {
         if (state != State.Active) revert BadState(state);
         if (keccak256(bytes(beneficiaryXrpl_)) != config.beneficiaryXrplHash) revert BadPreimage();
-        if (silenceProvenThroughTs < lastHeartbeatTs + config.heartbeatPeriod + config.gracePeriod) {
+        if (config.ownerEvm != address(0)) {
+            // EVM mode: consensus time IS the silence proof
+            if (block.timestamp < lastHeartbeatTs + config.heartbeatPeriod + config.gracePeriod) {
+                revert SilenceNotProven();
+            }
+        } else if (silenceProvenThroughTs < lastHeartbeatTs + config.heartbeatPeriod + config.gracePeriod) {
             revert SilenceNotProven();
         }
         state = State.ClaimPending;

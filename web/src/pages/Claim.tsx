@@ -153,10 +153,15 @@ export function Claim() {
                   </button>
                   {testResult === "done" && (
                     <div className="notice ok" style={{ marginTop: 12 }}>
-                      <strong>Blocked as designed.</strong> While the owner lives, the silence proof cannot be
-                      produced (<span className="mono">REFERENCED TRANSACTION EXISTS</span>) and the vault
-                      reverts (<span className="mono">SilenceNotProven</span>). Funds moved: 0. Owner control:
-                      intact. The attempt appears in the journey below.
+                      <strong>Blocked as designed.</strong>{" "}
+                      {v.ownerEvm !== "0x0000000000000000000000000000000000000000" ? (
+                        <>While the owner keeps checking in, Flare's consensus clock refuses the claim — the
+                        vault reverts (<span className="mono">SilenceNotProven</span>).</>
+                      ) : (
+                        <>While the owner lives, the silence proof cannot be produced (<span className="mono">REFERENCED
+                        TRANSACTION EXISTS</span>) and the vault reverts (<span className="mono">SilenceNotProven</span>).</>
+                      )}{" "}
+                      Funds moved: 0. Owner control: intact. The attempt appears in the journey below.
                     </div>
                   )}
                 </>
