@@ -40,6 +40,24 @@ open-source service against the same contracts.
 - **Attestation history window** — measured at ~14 days on Coston2's verifiers; production vaults therefore
   use 7-day rolling checkpoints (implemented and chain-tested) rather than single long windows.
 
+## EVM-owner mode (v3) — what changes, honestly
+
+For owners without an XRPL wallet, a vault can be configured with `ownerEvm` (MetaMask/OKX) instead of an
+XRPL owner hash. The state machine, challenge veto, and FAssets redemption to the beneficiary's XRPL wallet
+are identical. What differs:
+
+- **Silence oracle.** XRPL mode proves absence with source-filtered FDC `ReferencedPaymentNonexistence`
+  attestations. EVM mode uses Flare consensus time against `lastHeartbeatTs` — check-ins are owner-signed
+  `heartbeatEvm()` transactions, so "silence" is simply the absence of an on-chain transaction only the
+  owner's key can produce. Weaker narrative (no proof-of-absence attestation), equally enforceable on-chain.
+- **Attack surface.** There is no beacon/memo surface to copy, so the copycat-heartbeat attack does not
+  exist in this mode; the equivalent risk is EVM key compromise, which — exactly like XRPL key compromise —
+  lets the holder keep the vault alive or `cancelEvm()` it. Heirloom never changes who the beneficiary is.
+- **Cancel semantics.** `cancelEvm()` transfers the FXRP back to the owner account (the owner can redeem to
+  XRP via FAssets at will) rather than forcing an immediate redemption.
+- **Mode exclusivity.** A vault is one mode or the other, checked at initialization; XRPL proof paths revert
+  in EVM mode and vice versa, so the two silence clocks can never be mixed on one vault.
+
 ## Known limitations (v1)
 
 - Demo timing (minutes, clearly labelled) on Coston2; production timing is a config change.

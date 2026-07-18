@@ -155,6 +155,7 @@ export function Vault() {
   const head = HEADLINES[v.state] ?? { title: "Continuity plan", sub: "" };
   const tone = v.state === 2 ? (dueSoon ? "warn" : "alive") : v.state === 3 || v.state === 4 ? "warn" : "gold";
   const isEvmPlan = v.ownerEvm !== ZERO_EVM;
+  const headSub = v.state === 6 && isEvmPlan ? "The vault handed all FXRP back to your connected wallet." : head.sub;
 
   return (
     <main className="wrap" style={{ padding: "44px 24px" }}>
@@ -162,7 +163,7 @@ export function Vault() {
         <div>
           <div className="eyebrow">Continuity plan</div>
           <h1 style={{ fontSize: "2rem", margin: "8px 0 4px" }}>{dueSoon ? "Your check-in is due" : head.title}</h1>
-          <p style={{ fontSize: "0.92rem" }}>{head.sub}</p>
+          <p style={{ fontSize: "0.92rem" }}>{headSub}</p>
         </div>
         <span className={`pill ${tone}`}>● {["", "Awaiting funding", dueSoon ? "Check-in due" : "Healthy", "Claim pending", "Releasing", "Released", "Cancelled"][v.state]}</span>
       </div>
