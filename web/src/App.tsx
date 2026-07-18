@@ -13,8 +13,8 @@ import { EVM_NONE, EvmState, WalletOption, connectWith, disconnectEvm, retrySwit
 import { CONFIG } from "./config";
 import { c2Balance, fmtFxrp, readVault, short, vaultsOfOwner } from "./lib/chain";
 
-const PLAN_STATES = ["—", "Funding", "Active", "Claim pending", "Releasing", "Released", "Cancelled"];
-const PLAN_TONES = ["var(--mist-2)", "var(--lamplight)", "var(--verdant)", "var(--ember)", "var(--ember)", "var(--mist)", "var(--mist-2)"];
+const PLAN_STATES = ["—", "Funding", "Active", "Claim pending", "Releasing", "Released", "Cancelled", "Cancelling"];
+const PLAN_TONES = ["var(--mist-2)", "var(--lamplight)", "var(--verdant)", "var(--ember)", "var(--ember)", "var(--mist)", "var(--mist-2)", "var(--ember)"];
 
 const WalletCtx = createContext<{
   wallet: WalletState;

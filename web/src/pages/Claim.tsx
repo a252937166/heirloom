@@ -189,18 +189,26 @@ export function Claim() {
             </div>
           )}
 
-          {v.state === 3 && (
-            <div className="card">
-              <h3 style={{ marginBottom: 8 }}>Step 3 — the final challenge</h3>
-              <p style={{ fontSize: "0.9rem", marginBottom: 12 }}>
-                Ends {new Date(v.claimChallengeEndsAt * 1000).toLocaleTimeString()}. One heartbeat from the
-                owner cancels this claim — their final veto.
-              </p>
-              <button className="btn btn-primary" disabled={busy || now < v.claimChallengeEndsAt} onClick={requestRelease}>
-                {now < v.claimChallengeEndsAt ? "Waiting out the challenge…" : busy ? "Releasing…" : "Execute the release"}
-              </button>
-            </div>
-          )}
+          {v.state === 3 && (() => {
+            const eligibleAt = v.claimChallengeEndsAt + v.vetoProofGrace;
+            return (
+              <div className="card">
+                <h3 style={{ marginBottom: 8 }}>Step 3 — the final challenge</h3>
+                <div className="kv" style={{ marginBottom: 12 }}>
+                  <div className="kv-row"><span className="k">Owner heartbeat deadline</span><span className="v">{new Date(v.claimChallengeEndsAt * 1000).toLocaleTimeString()}</span></div>
+                  <div className="kv-row"><span className="k">Proof settlement buffer</span><span className="v">{v.vetoProofGrace}s — a pre-deadline heartbeat proof may still land</span></div>
+                  <div className="kv-row"><span className="k">Earliest release</span><span className="v">{new Date(eligibleAt * 1000).toLocaleTimeString()}</span></div>
+                </div>
+                <p style={{ fontSize: "0.85rem", marginBottom: 12 }}>
+                  One heartbeat <em>sent</em> before the deadline cancels this claim — even if its proof
+                  arrives during the buffer. The XRPL timestamp decides, not transaction ordering.
+                </p>
+                <button className="btn btn-primary" disabled={busy || now < eligibleAt} onClick={requestRelease}>
+                  {now < eligibleAt ? "Waiting out the challenge + proof buffer…" : busy ? "Releasing…" : "Execute the release"}
+                </button>
+              </div>
+            );
+          })()}
 
           {v.state === 4 && (
             <div className="notice">

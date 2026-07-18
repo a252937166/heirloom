@@ -31,13 +31,13 @@
 
 Live app: **https://heirloom.axiqo.xyz** · GitHub: https://github.com/a252937166/heirloom · Flare Coston2 + XRPL testnet (demo timing)
 
-~20% of all Bitcoin is already lost forever — much of it because holders died or lost keys with no succession plan. XRP's holder base is one of crypto's oldest, and XRPL cannot express "inheritance" natively: escrows release on fixed dates and cannot be reset by a heartbeat. Custodial services ask for your keys; Ledger-Recover-style products proved how much users hate that.
+Self-custodied assets become inaccessible the moment their holder can no longer act — and XRPL cannot express a resettable inactivity condition natively: escrows release on fixed dates and cannot be reset by a heartbeat. Custodial services solve it by taking your keys; Heirloom solves it without anyone taking them.
 
 Heirloom is the non-custodial answer, and it is only possible on Flare:
 
 - **FAssets** custodies the XRP programmatically (direct mint in, redemption out) — the owner funds a personal vault contract with **one ordinary XRPL payment**, the XRP-native path never needs an EVM wallet.
 - **FDC `XRPPayment`** proves owner-signed facts: 1-drop heartbeats reset the dial; a special memo cancels and refunds; the funding payment itself is proven and minted.
-- **FDC `ReferencedPaymentNonexistence`** — the industry's only consensus **proof of absence** — proves the silence, source-filtered so nobody can fake the owner's liveness, chained ledger-by-ledger so nobody can skip a heartbeat.
+- **FDC `ReferencedPaymentNonexistence`** — the FDC's consensus **proof of absence** — proves the silence, source-filtered so nobody can fake the owner's liveness, chained ledger-by-ledger so nobody can skip a heartbeat.
 
 ## The two impossibilities
 
@@ -61,7 +61,7 @@ Rolling checkpoints for production-scale periods are implemented and chain-teste
 
 ## Architecture
 
-The EVM side has **no privileged keys**. Every state change is authorized by an XRPL event proven by FDC, or a public timeout; every keeper action is a permissionless crank anyone could submit from public data (we watched a third-party executor beat our own keeper to a mint — the vault didn't care).
+In the flagship XRP-native mode, the EVM side has **no privileged user key**. Every state change is authorized by an XRPL event proven by FDC, or a public timeout; every keeper action is a permissionless crank anyone could submit from public data (we watched a third-party executor beat our own keeper to a mint — the vault didn't care).
 
 Contracts: `HeirloomVault` (7-state machine, dual-proof validation, challenge veto, XRPL-signed cancel, EVM-owner mode with consensus-time silence) + `HeirloomFactory` (EIP-1167 clone per plan). Factory (v3): `0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2` (Coston2). 15 unit tests incl. adversarial + EVM-owner suites.
 

@@ -1,7 +1,8 @@
 // The signature dial, reskinned to the reference mock: a thick multi-segment
 // ring (green while safe, orange as the deadline nears, orange in a challenge)
 // with a violet heartbeat wave running through the center.
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { chainNow } from "../lib/time";
 
 function arc(cx: number, cy: number, r: number, from: number, to: number) {
   // fractions of the circle, starting at 12 o'clock, clockwise
@@ -26,11 +27,12 @@ export function PulseDial({
   state: number;       // vault state
   label?: string;
 }) {
-  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+  const [now, setNow] = useState(() => chainNow());
   useEffect(() => {
-    const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
+    const t = setInterval(() => setNow(chainNow()), 1000);
     return () => clearInterval(t);
   }, []);
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
 
   const total = Math.max(1, deadlineTs - lastAliveTs);
   const elapsed = Math.min(total, Math.max(0, now - lastAliveTs));
@@ -62,11 +64,11 @@ export function PulseDial({
       aria-label={`Inactivity dial: ${fmt(remaining)} until the ${challenge ? "challenge ends" : "silence deadline"}`}>
       <svg width={size} height={size}>
         <defs>
-          <linearGradient id="hl-green" x1="0" y1="0" x2="1" y2="1">
+          <linearGradient id={`hl-green-${uid}`} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#2fd674" />
             <stop offset="100%" stopColor="#8be04a" />
           </linearGradient>
-          <linearGradient id="hl-amber" x1="0" y1="0" x2="1" y2="1">
+          <linearGradient id={`hl-amber-${uid}`} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#ffb03c" />
             <stop offset="100%" stopColor="#ff8a3c" />
           </linearGradient>
@@ -74,18 +76,18 @@ export function PulseDial({
         {/* track */}
         <circle cx={cx} cy={cx} r={r} fill="none" stroke="var(--line)" strokeWidth={W} opacity={0.55} />
         {/* settled: full green ring */}
-        {settled && <circle cx={cx} cy={cx} r={r} fill="none" stroke="url(#hl-green)" strokeWidth={W} strokeLinecap="round" />}
+        {settled && <circle cx={cx} cy={cx} r={r} fill="none" stroke={`url(#hl-green-${uid})`} strokeWidth={W} strokeLinecap="round" />}
         {/* elapsed, safe part (green) */}
         {!settled && greenTo > eps && (
-          <path d={arc(cx, cx, r, 0, greenTo)} fill="none" stroke="url(#hl-green)" strokeWidth={W} strokeLinecap="round" />
+          <path d={arc(cx, cx, r, 0, greenTo)} fill="none" stroke={`url(#hl-green-${uid})`} strokeWidth={W} strokeLinecap="round" />
         )}
         {/* the tail of the window / challenge (orange) */}
         {!settled && (challenge ? frac > eps : frac > AMBER_AT) && (
           <path d={arc(cx, cx, r, challenge ? 0 : amberFrom, Math.max(amberTo, (challenge ? 0 : amberFrom) + eps))}
-            fill="none" stroke="url(#hl-amber)" strokeWidth={W} strokeLinecap="round" />
+            fill="none" stroke={`url(#hl-amber-${uid})`} strokeWidth={W} strokeLinecap="round" />
         )}
         {/* releasing: full amber */}
-        {state === 4 && <circle cx={cx} cy={cx} r={r} fill="none" stroke="url(#hl-amber)" strokeWidth={W} strokeLinecap="round" opacity={0.9} />}
+        {state === 4 && <circle cx={cx} cy={cx} r={r} fill="none" stroke={`url(#hl-amber-${uid})`} strokeWidth={W} strokeLinecap="round" opacity={0.9} />}
         {/* alive ping */}
         {alive && <circle className="pulse-ping" cx={cx} cy={cx} r={r - 16} fill="none" stroke="var(--verdant)" strokeWidth={1.2} />}
         {challenge && <circle className="pulse-ping" cx={cx} cy={cx} r={r - 16} fill="none" stroke="var(--ember)" strokeWidth={1.4} />}

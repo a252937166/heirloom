@@ -46,6 +46,7 @@ function rec(vaultAddr, kind, label, extra = {}) {
 const metaOf = (addr) => (store.vaults[addr.toLowerCase()] ??= { events: [], meta: {} }).meta;
 
 const vaultAt = (addr) => new Contract(addr, VAULT_ABI, agent);
+const jsonSafe = (x) => JSON.parse(JSON.stringify(x, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
 
 // --- background job runner (sequential per vault) -----------------------------
 const jobs = new Map(); // vault → {name, startedAt} | undefined
@@ -67,13 +68,64 @@ async function runJob(vaultAddr, name, fn) {
 // --- app ----------------------------------------------------------------------
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "16kb" }));
+
+// the keeper pays gas for sponsored creates — cap the burn rate
+const createHits = new Map(); // ip → timestamps
+let createsToday = { day: "", n: 0 };
+function createAllowed(ip) {
+  const now = Date.now();
+  const day = new Date().toISOString().slice(0, 10);
+  if (createsToday.day !== day) createsToday = { day, n: 0 };
+  if (createsToday.n >= 60) return "daily sponsored-create quota reached — try tomorrow or run your own keeper (open source)";
+  const hits = (createHits.get(ip) ?? []).filter((t) => now - t < 3600_000);
+  if (hits.length >= 6) return "rate limit: 6 sponsored creates per hour per IP";
+  hits.push(now);
+  createHits.set(ip, hits);
+  createsToday.n += 1;
+  return null;
+}
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, factory: dep.factory, beacon: BEACON, at: Date.now() }));
 
+// direct-mint quote: exact drops + payment address, refreshed at pay time.
+// Best-effort dynamic address (newer AssetManagers expose it); falls back to
+// the deployment's core vault. Quotes expire — never pay from a stale one.
+app.get("/api/direct-mint/quote", async (req, res) => {
+  try {
+    const lots = Math.max(1, Math.min(10, Number(req.query.lots ?? 2)));
+    const net = lots * (Number(dep.lotSizeUBA) / 1e6);
+    const grossDrops = Math.ceil((net + 0.1 + 0.15) / 0.9975 * 1e6);
+    let paymentAddress = dep.coreVaultXrpl;
+    try {
+      const dyn = new Contract(dep.assetManager, ["function getDirectMintingPaymentAddress() view returns (string)"], provider);
+      const a = await dyn.getDirectMintingPaymentAddress();
+      if (a && a.startsWith("r")) paymentAddress = a;
+    } catch { /* older AssetManager — deployment address is authoritative */ }
+    res.json({
+      quoteId: hexlify(randomBytes(8)),
+      lots,
+      netMintUBA: String(lots * Number(dep.lotSizeUBA)),
+      exactPaymentDrops: String(grossDrops),
+      paymentAddress,
+      feeNote: "includes the FAssets minting fee (0.25%) + executor fee + safety margin",
+      issuedAt: Math.floor(Date.now() / 1000),
+      expiresAt: Math.floor(Date.now() / 1000) + 120,
+    });
+  } catch (e) {
+    res.status(500).send(e.shortMessage ?? e.message);
+  }
+});
+
 app.post("/api/vaults", async (req, res) => {
   try {
+    const limited = createAllowed(req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ?? req.ip ?? "?");
+    if (limited) return res.status(429).send(limited);
     const { ownerXrpl, ownerEvm, beneficiaryXrpl, heartbeatPeriod = 240, grace = 60, challenge = 120, lots = 2 } = req.body ?? {};
+    // proof grace: FDC rounds take 90-180s — a pre-cutoff heartbeat must never
+    // lose a race against the release crank. EVM check-ins have no latency.
+    const evmModeEarly = /^0x[0-9a-fA-F]{40}$/.test(ownerEvm ?? "");
+    const vetoProofGrace = Number(req.body?.vetoProofGrace ?? (evmModeEarly ? 0 : 180));
     const evmMode = /^0x[0-9a-fA-F]{40}$/.test(ownerEvm ?? "");
     if (!evmMode && !/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(ownerXrpl ?? "")) {
       return res.status(400).send("provide ownerXrpl (XRPL mode) or ownerEvm (MetaMask/OKX mode)");
@@ -86,7 +138,7 @@ app.post("/api/vaults", async (req, res) => {
     const ZERO32 = "0x" + "00".repeat(32);
     const cfg = [
       evmMode ? ZERO32 : addrHash(ownerXrpl), addrHash(beneficiaryXrpl), addrHash(BEACON), reference,
-      BigInt(heartbeatPeriod), BigInt(grace), BigInt(challenge),
+      BigInt(heartbeatPeriod), BigInt(grace), BigInt(challenge), BigInt(vetoProofGrace),
       BigInt(nowL.ledger), BigInt(nowL.ts), BigInt(dep.lotSizeUBA),
       evmMode ? ownerEvm : "0x0000000000000000000000000000000000000000",
     ];
@@ -123,6 +175,16 @@ app.post("/api/vaults/:addr/funded", async (req, res) => {
             const tx = await assetManager.executeDirectMinting({ merkleProof: proof.merkleProof, data: proof.data });
             await tx.wait();
             bal = await fxrp.balanceOf(addr);
+            if (bal === 0n) {
+              // the protocol accepted the proof but deferred the mint (rate
+              // limits / large-mint delay). The SAME proof retries later —
+              // the user must never pay twice.
+              const meta2 = metaOf(addr);
+              meta2.pendingMint = { proof: jsonSafe({ merkleProof: proof.merkleProof, data: proof.data }), tries: 0, at: Date.now() };
+              persist();
+              rec(addr, "mintPending", "Payment received by the protocol — minting is deferred by FAssets limits. The keeper retries with the same proof; no second payment is needed.", { txFlare: tx.hash, round: proof.meta.round, tone: "warn" });
+              return;
+            }
             rec(addr, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP`, { txFlare: tx.hash, round: proof.meta.round, tone: "ok" });
           }
         } catch (e) {
@@ -507,7 +569,49 @@ async function fundingScan() {
     log(`fundingScan: ${e.message?.slice(0, 80)}`);
   }
 }
+async function pendingScan() {
+  for (const [key, sv] of Object.entries(store.vaults)) {
+    // (a) deferred direct mints: retry the SAME proof until FXRP lands
+    const pm = sv.meta?.pendingMint;
+    if (pm && !jobs.get(key) && Date.now() - pm.at > 90_000 && pm.tries < 20) {
+      pm.tries += 1; pm.at = Date.now(); persist();
+      runJob(key, "mint-retry", async () => {
+        let bal = await fxrp.balanceOf(key);
+        if (bal === 0n) {
+          try {
+            const tx = await assetManager.executeDirectMinting(pm.proof);
+            await tx.wait();
+          } catch { /* still deferred or already executed elsewhere */ }
+          bal = await fxrp.balanceOf(key);
+        }
+        if (bal > 0n) {
+          delete sv.meta.pendingMint; persist();
+          rec(key, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP (deferred mint settled)`, { tone: "ok" });
+          const v = vaultAt(key);
+          if (Number(await v.state()) === 1) {
+            const atx = await v.activate();
+            await atx.wait();
+            rec(key, "active", "Vault is ACTIVE — the dial is live", { txFlare: atx.hash, tone: "ok" });
+          }
+        }
+      }).catch(() => {});
+    }
+    // (b) cancel redemptions that FAssets fulfilled only partially (state 7)
+    if (!jobs.get(key) && !sv.meta?.pendingMint) {
+      vaultAt(key).state().then((st) => {
+        if (Number(st) === 7 && !jobs.get(key)) {
+          runJob(key, "cancel-crank", async () => {
+            const tx = await vaultAt(key).cancelCrank();
+            await tx.wait();
+            rec(key, "cancelled", "Cancel redemption cranked — remaining balance settled toward the owner", { txFlare: tx.hash, tone: "gold" });
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+  }
+}
 setInterval(fundingScan, 30_000);
+setInterval(pendingScan, 45_000);
 
 const PORT = process.env.PORT ?? 8787;
 app.listen(PORT, () => log(`heirloom keeper listening on :${PORT} (factory ${dep.factory})`));

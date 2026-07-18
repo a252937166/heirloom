@@ -17,6 +17,7 @@ const CFG = {
   heartbeatPeriod: 1000n,
   gracePeriod: 100n,
   challengePeriod: 200n,
+  vetoProofGrace: 60n, // proofs take FDC rounds to land — the timestamp decides
   creationLedger: 1000n,
   creationTs: 1_000_000n,
   lotSizeUBA: LOT,
@@ -200,6 +201,9 @@ describe("HeirloomVault", () => {
       expect(await vault.state()).to.equal(3); // ClaimPending
       await expect(vault.executeRelease()).to.be.revertedWithCustomError(vault, "ChallengeNotOver");
       await ethers.provider.send("evm_increaseTime", [201]);
+      // inside the proof grace: a pre-cutoff heartbeat proof may still land
+      await expect(vault.executeRelease()).to.be.revertedWithCustomError(vault, "ChallengeNotOver");
+      await ethers.provider.send("evm_increaseTime", [61]);
       await expect(vault.executeRelease()).to.emit(vault, "Released");
       expect(await vault.state()).to.equal(5); // Released
       expect(await am.lastAmountUBA()).to.equal(3n * LOT);
@@ -220,6 +224,35 @@ describe("HeirloomVault", () => {
     });
   });
 
+  describe("veto race protection (v4)", () => {
+    beforeEach(async () => {
+      await fundAndActivate();
+      await vault.attestSilence(rpnProof(1001n, 1500n, 1_001_200n));
+      await vault.startClaim(BENEFICIARY_XRPL);
+    });
+
+    it("a pre-cutoff heartbeat proof landing during the grace window still vetoes", async () => {
+      await ethers.provider.send("evm_increaseTime", [210]); // past cutoff, inside grace
+      await ethers.provider.send("evm_mine", []);
+      await expect(
+        vault.recordHeartbeat(xrpPaymentProof({ blockNumber: 1600n, blockTimestamp: 1_001_300n })),
+      ).to.emit(vault, "ClaimVetoed");
+      expect(await vault.state()).to.equal(2);
+    });
+
+    it("a heartbeat SENT after the cutoff can never veto", async () => {
+      const cutoff = await vault.claimChallengeEndsAt();
+      await expect(
+        vault.recordHeartbeat(xrpPaymentProof({ blockNumber: 1600n, blockTimestamp: cutoff + 10n })),
+      ).to.be.revertedWithCustomError(vault, "VetoWindowClosed");
+    });
+
+    it("releaseEligibleAt = challenge cutoff + proof grace", async () => {
+      const cutoff = await vault.claimChallengeEndsAt();
+      expect(await vault.releaseEligibleAt()).to.equal(cutoff + 60n);
+    });
+  });
+
   describe("cancel", () => {
     beforeEach(async () => fundAndActivate());
 
@@ -232,6 +265,19 @@ describe("HeirloomVault", () => {
       ).to.emit(vault, "CancelExecuted");
       expect(await vault.state()).to.equal(6); // Cancelled
       expect(await am.lastUnderlying()).to.equal(OWNER_XRPL);
+    });
+
+    it("partial cancel redemption stays crankable — funds can never lock (v4)", async () => {
+      const cancelRef = ethers.keccak256(ethers.concat([ethers.toUtf8Bytes("HEIRLOOM/CANCEL"), REFERENCE]));
+      await am.setPartialMode(true);
+      await vault.cancel(OWNER_XRPL, xrpPaymentProof({ firstMemoData: cancelRef }));
+      expect(await vault.state()).to.equal(7); // Cancelling — not terminal, not stuck
+      expect(await fxrp.balanceOf(await vault.getAddress())).to.be.greaterThan(0n);
+      await am.setPartialMode(false);
+      await vault.cancelCrank();
+      expect(await vault.state()).to.equal(6); // Cancelled
+      expect(await fxrp.balanceOf(await vault.getAddress())).to.equal(0n);
+      await expect(vault.cancelCrank()).to.be.revertedWithCustomError(vault, "BadState");
     });
 
     it("rejects cancel with heartbeat reference or wrong preimage", async () => {
@@ -247,7 +293,7 @@ describe("HeirloomVault", () => {
 
     beforeEach(async () => {
       [ownerEvm, stranger] = await ethers.getSigners();
-      const cfg = { ...CFG, ownerXrplHash: ethers.ZeroHash, ownerEvm: ownerEvm.address, heartbeatReference: ethers.hexlify(ethers.randomBytes(32)) };
+      const cfg = { ...CFG, ownerXrplHash: ethers.ZeroHash, ownerEvm: ownerEvm.address, vetoProofGrace: 0n, heartbeatReference: ethers.hexlify(ethers.randomBytes(32)) };
       const tx = await factory.createVault(cfg, 0n);
       const rc = await tx.wait();
       const ev = rc!.logs.map((l) => factory.interface.parseLog(l)).find((p) => p?.name === "VaultCreated");
@@ -276,6 +322,9 @@ describe("HeirloomVault", () => {
       await ethers.provider.send("evm_mine", []);
       await v4.startClaim(BENEFICIARY_XRPL);
       await ethers.provider.send("evm_increaseTime", [201]);
+      await ethers.provider.send("evm_mine", []);
+      // past the cutoff: a late one-click veto must fail too — same rule, no latency excuse
+      await expect(v4.connect(ownerEvm).heartbeatEvm()).to.be.revertedWithCustomError(v4, "VetoWindowClosed");
       await expect(v4.executeRelease()).to.emit(v4, "Released");
       expect(await am.lastUnderlying()).to.equal(BENEFICIARY_XRPL);
     });
