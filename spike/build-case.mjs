@@ -4,7 +4,7 @@
 // fails here, the page must say so instead of pretending.
 //
 //   node build-case.mjs [vaultAddress] [apiBase]
-import { Contract, keccak256, toUtf8Bytes } from "ethers";
+import { Contract, Interface, keccak256, toUtf8Bytes } from "ethers";
 import { readFileSync, writeFileSync } from "node:fs";
 import { provider, curlJson, xrplRpc, VAULT_ABI, vaultConfig, log } from "./fdc-lib.mjs";
 
@@ -34,6 +34,41 @@ const claimStarted = first("claimStarted");
 const released = first("released");
 const residualEv = first("residual");
 
+// --- decode the redemption from the release receipt (chain truth) ---------
+const AM_EVENTS = new Interface([
+  "event RedemptionRequested(address indexed agentVault, address indexed redeemer, uint256 indexed requestId, string paymentAddress, uint256 valueUBA, uint256 feeUBA, uint256 firstUnderlyingBlock, uint256 lastUnderlyingBlock, uint256 lastUnderlyingTimestamp, bytes32 paymentReference, address executor, uint256 executorFeeNatWei)",
+]);
+let redemption = null;
+if (released?.txFlare) {
+  try {
+    const rc = await provider.getTransactionReceipt(released.txFlare);
+    for (const lg of rc?.logs ?? []) {
+      try {
+        const p = AM_EVENTS.parseLog(lg);
+        if (p?.name === "RedemptionRequested") {
+          redemption = {
+            requestId: p.args.requestId.toString(),
+            valueUBA: p.args.valueUBA.toString(),
+            feeUBA: p.args.feeUBA.toString(),
+            paymentReference: p.args.paymentReference,
+          };
+        }
+      } catch { /* other logs */ }
+    }
+  } catch {}
+}
+
+// --- find the recordHeartbeat tx on-chain when the journal lacks it --------
+let heartbeatTxFlare = first("alive")?.txFlare ?? null;
+if (!heartbeatTxFlare) {
+  try {
+    const sel = new Interface(VAULT_ABI).getFunction("recordHeartbeat")?.selector;
+    const bs = await curlJson(`https://coston2-explorer.flare.network/api?module=account&action=txlist&address=${VAULT}`);
+    const row = (Array.isArray(bs.result) ? bs.result : []).find((t) => t.input?.startsWith(sel) && t.isError === "0");
+    if (row) heartbeatTxFlare = row.hash;
+  } catch {}
+}
+
 // --- recover the mint tx from the chain when a network executor beat the
 // keeper to executeDirectMinting (the event then has no hash on record)
 let mintTxFlare = minted?.txFlare ?? null;
@@ -62,7 +97,8 @@ if (settled?.txXrpl) {
   }
 }
 const destMatches = !!settleTx && keccak256(toUtf8Bytes(settleTx.destination)) === cfg.beneficiaryXrplHash;
-const refBound = !!settleTx?.memoHex; // FAssets settlements carry the redemption payment reference as memo
+const refBound = !!settleTx?.memoHex && !!redemption &&
+  settleTx.memoHex.toLowerCase() === redemption.paymentReference.slice(2).toLowerCase();
 const challengeRespected = !!(claimStarted && released) &&
   released.at >= claimStarted.at + Number(cfg.challengePeriod);
 const balanceUBA = Number(balance);
@@ -74,19 +110,19 @@ const linksPresent = [mintTxFlare, settled?.txXrpl, released?.txFlare].every(Boo
 
 const checks = [
   { label: "Payout destination matches the configured beneficiary (hash preimage verified against XRPL tx)", passed: destMatches },
-  { label: "Settlement transaction carries the redemption payment reference in its memo", passed: refBound },
+  { label: "Settlement memo EQUALS the RedemptionRequested paymentReference (decoded from the release receipt)", passed: refBound },
   { label: "Challenge window fully elapsed before the release executed", passed: challengeRespected },
   { label: zeroBalance
       ? "Final vault FXRP balance is zero — fully reconciled"
-      : `Every redeemable lot settled; remaining ${(balanceUBA / 1e6).toFixed(2)} FXRP is below one ${lotUBA / 1e6}-FXRP lot (FAssets redeems whole lots) and stays visible on-chain`,
+      : `The vault redeemed the maximum the FAssets protocol accepts; the remaining ${(balanceUBA / 1e6).toFixed(2)} FXRP is below the protocol redemption minimum and stays publicly visible on-chain`,
     passed: releasedState && (zeroBalance || residualBelowLot) },
   { label: "All key claims carry public transaction hashes", passed: linksPresent },
 ];
 const allPassed = checks.every((c) => c.passed);
 const verdict = !releasedState ? "SETTLEMENT IN PROGRESS"
   : !allPassed ? "PARTIALLY RECONCILED"
-  : zeroBalance ? "VERIFIED COMPLETE"
-  : "VERIFIED COMPLETE · RESIDUAL DISCLOSED";
+  : zeroBalance ? "SETTLED · FULLY RECONCILED"
+  : "SETTLED · RESIDUAL DISCLOSED";
 
 const manifest = {
   id: "case-001",
@@ -102,11 +138,13 @@ const manifest = {
   heartbeatEpochs: Number(epoch),
   fdcRounds: [...new Set(events.map((e) => e.round).filter(Boolean))],
   silenceRound: silence?.round ?? null,
-  redemptionIds: released?.label.match(/#\d+/g) ?? [],
+  redemptionIds: redemption ? [`#${redemption.requestId}`] : (released?.label.match(/#\d+/g) ?? []),
+  redemption,
+  contractVersion: "HeirloomVault v2 (this case predates the v3 EVM-owner field; v3 factory: " + dep.factory + ")",
   mintTxFlare,
   fundingTxXrpl: first("funding")?.txXrpl ?? null,
   heartbeatTxXrpl: first("heartbeat")?.txXrpl ?? null,
-  heartbeatTxFlare: first("alive")?.txFlare ?? null,
+  heartbeatTxFlare,
   heartbeatRound: first("alive")?.round ?? null,
   createdTxFlare: first("created")?.txFlare ?? null,
   claimStartTxFlare: claimStarted?.txFlare ?? null,

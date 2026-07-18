@@ -26,6 +26,10 @@ interface Chapter {
 }
 
 const m = manifest;
+const CHAPTER_SHORT: Record<string, string> = {
+  promise: "Promise", funded: "Funded", heartbeat: "Heartbeat", "early-claim": "Blocked",
+  silence: "Silence", challenge: "Challenge", payout: "Payout",
+};
 const xrplTx = (h?: string | null) => (h ? `${CONFIG.xrplExplorer}/transactions/${h}` : undefined);
 const flareTx = (h?: string | null) => (h ? `${CONFIG.explorer}/tx/${h}` : undefined);
 
@@ -164,10 +168,12 @@ export function CaseStudy() {
   const [live, setLive] = useState<VaultView | null>(null);
   const [railSel, setRailSel] = useState<string | null>(null);
   const [tour, setTour] = useState(false);
+  const [tourPaused, setTourPaused] = useState(false);
   const [tourT, setTourT] = useState(0);
   const playerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (params.get("tour") === "1") { setTourT(0); setTour(true); }
     readVault(m.vault).then(setLive).catch(() => {});
     fetch(`${CONFIG.api}/vaults/${m.vault}`)
       .then((r) => (r.ok ? r.json() : { events: [] }))
@@ -184,10 +190,12 @@ export function CaseStudy() {
   // 90-second guided tour: auto-advances chapters, pausable, never opens external links
   useEffect(() => {
     if (!tour) return;
-    playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (!reduce) playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (tourPaused) return;
     const t = setInterval(() => setTourT((s) => s + 0.5), 500);
     return () => clearInterval(t);
-  }, [tour]);
+  }, [tour, tourPaused]);
   useEffect(() => {
     if (!tour) return;
     if (tourT >= TOUR_TOTAL) { setTour(false); setTourT(0); return; }
@@ -202,7 +210,7 @@ export function CaseStudy() {
   const liveBalance = live ? fmtFxrp(live.fxrpBalance) : null;
 
   const statusCards: [string, string][] = [
-    ["Plan status", m.finalState === 5 ? "Completed" : m.finalState === 4 ? "Releasing" : "In progress"],
+    ["Plan status", m.finalState === 5 ? "Settled" : m.finalState === 4 ? "Releasing" : "In progress"],
     ["Owner control", "Preserved until release"],
     ["Early claim", "Blocked"],
     ["Silence proof", "Verified"],
@@ -222,11 +230,12 @@ export function CaseStudy() {
       {tour && (
         <div style={{ position: "sticky", top: 62, zIndex: 9, background: "var(--ink-2)", borderBottom: "1px solid var(--line)" }} className="no-print">
           <div className="wrap" style={{ display: "flex", alignItems: "center", gap: 14, padding: "8px 24px" }}>
-            <span className="mono" style={{ fontSize: "0.7rem", color: "var(--lamplight)" }}>90-second tour · chapter {ch.n}/7</span>
+            <span className="mono" style={{ fontSize: "0.7rem", color: "var(--lamplight)" }}>{Math.min(90, Math.floor(tourT))}s / 90s · chapter {ch.n} of 7</span>
             <div style={{ flex: 1, height: 4, background: "var(--line)", borderRadius: 2 }}>
               <div style={{ width: `${Math.min(100, (tourT / TOUR_TOTAL) * 100)}%`, height: "100%", background: "var(--lamplight)", borderRadius: 2, transition: "width 0.5s linear" }} />
             </div>
-            <button className="btn btn-ghost" style={{ padding: "4px 10px", fontSize: "0.72rem" }} onClick={() => setTour(false)}>❚❚ Stop</button>
+            <button className="btn btn-ghost" style={{ padding: "4px 10px", fontSize: "0.72rem" }} onClick={() => setTourPaused((p) => !p)}>{tourPaused ? "▶ Resume" : "❚❚ Pause"}</button>
+            <button className="btn btn-ghost" style={{ padding: "4px 10px", fontSize: "0.72rem" }} onClick={() => { setTour(false); setTourPaused(false); setTourT(0); }}>✕ Exit</button>
           </div>
         </div>
       )}
@@ -278,7 +287,7 @@ export function CaseStudy() {
           ))}
           {residual && (
             <span className="mono" style={{ fontSize: "0.72rem", color: "var(--mist-2)" }}>
-              — residual below one lot, disclosed (FAssets redeems whole lots){liveBalance ? ` · live: ${liveBalance} FXRP` : ""}
+              — the protocol maximum was redeemed; the remainder is below the redemption minimum and disclosed{liveBalance ? ` · live: ${liveBalance} FXRP` : ""}
             </span>
           )}
         </div>
@@ -303,7 +312,7 @@ export function CaseStudy() {
                       color: i === idx ? (c.ember ? "var(--ember)" : "var(--lamplight)") : "var(--mist-2)",
                       borderColor: i === idx ? `color-mix(in srgb, ${c.ember ? "var(--ember)" : "var(--lamplight)"} 50%, transparent)` : "var(--line)",
                     }}>
-                    {c.n}
+                    {c.n} <span className="chapter-label">{CHAPTER_SHORT[c.id]}</span>
                   </button>
                 ))}
               </div>
@@ -358,12 +367,12 @@ export function CaseStudy() {
           {[["XRP Ledger — where the owner and beneficiary act", RAIL_XRPL], ["Flare — where facts are proven and rules are enforced", RAIL_FLARE]].map(([title, nodes], row) => (
             <div key={row} style={{ marginBottom: row === 0 ? 18 : 0 }}>
               <div className="mono" style={{ fontSize: "0.66rem", color: "var(--mist-2)", marginBottom: 8 }}>{title as string}</div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 560 }}>
+              <div className="rail-row" style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 560 }}>
                 {(nodes as typeof RAIL_XRPL).map((nd, i) => {
                   const active = railSel !== null && (nd.id === railSel || nd.pair === railSel);
                   return (
                     <span key={nd.id} style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-                      {i > 0 && <span style={{ flex: 1, height: 1, background: "var(--line)" }} />}
+                      {i > 0 && <span className="rail-sep" style={{ flex: 1, height: 1, background: "var(--line)" }} />}
                       <button onClick={() => setRailSel(railSel === nd.id ? null : nd.id)} disabled={!nd.hash}
                         className="pill"
                         style={{
@@ -431,8 +440,9 @@ export function CaseStudy() {
                 ))}
               </tbody>
             </table>
-            <p style={{ fontSize: "0.78rem", marginTop: 10 }}>
-              <Link to={`/claim/${m.vault}`}>test the early-claim protection yourself →</Link>
+            <p style={{ fontSize: "0.78rem", marginTop: 10, display: "flex", gap: 14, flexWrap: "wrap" }}>
+              <Link to={`/claim/${m.vault}`}>run the drill yourself →</Link>
+              <a className="mono" style={{ fontSize: "0.7rem" }} href={`${CONFIG.github}/blob/main/contracts/contracts/HeirloomVault.sol`} target="_blank" rel="noreferrer">guard source ↗</a>
             </p>
           </div>
         </div>
@@ -448,8 +458,8 @@ export function CaseStudy() {
             </span>
           </div>
           <p style={{ fontSize: "0.9rem", margin: "10px 0 16px", maxWidth: 640 }}>
-            The continuity plan completed. Native XRP arrived at the configured beneficiary wallet, and the
-            vault's remaining balance is reconciled below — to the drop.
+            The plan settled. Native XRP arrived at the configured beneficiary wallet; every number below is
+            reconciled against the chain — to the drop, residual included.
           </p>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", fontSize: "0.84rem", borderCollapse: "collapse" }}>
@@ -458,6 +468,9 @@ export function CaseStudy() {
                   ["Plan", "Case 001 (canonical demo lifecycle)"],
                   ["Vault", m.vault],
                   ["Protected FXRP", `${m.protectedFxrp} FXRP`],
+                  ["Redeemed", m.redemption ? `${(Number(m.redemption.valueUBA) / 1e6).toFixed(2)} FXRP (request #${m.redemption.requestId})` : "—"],
+                  ["Redemption fee (protocol)", m.redemption ? `${(Number(m.redemption.feeUBA) / 1e6).toFixed(2)} FXRP` : "—"],
+                  ["Payment reference", m.redemption ? m.redemption.paymentReference : "—"],
                   ["XRP received", `${m.payoutXrp} XRP → ${m.settlement?.destination ?? "beneficiary wallet"}`],
                   ["Settlement transaction", m.settlement?.hash ?? "—"],
                   ["Release transaction", m.releaseTxFlare ?? "—"],

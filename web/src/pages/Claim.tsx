@@ -5,7 +5,19 @@ import { VaultView, addrHash, fmtFxrp, readVault, short } from "../lib/chain";
 import { EvidenceTimeline, KeeperEvent } from "./Vault";
 import { PulseDial } from "../components/PulseDial";
 
-const STEPS = ["Verify your wallet", "Prove the silence", "Final challenge", "Redemption", "XRP received"];
+const STEPS = ["Confirm beneficiary address", "Prove the silence", "Final challenge", "Redemption", "XRP received"];
+
+interface DrillResult {
+  blocked: boolean;
+  stage: string;
+  reason: string;
+  detail?: string;
+  fundsMoved: string;
+}
+interface Receipt {
+  redemptions: { requestId: string; paymentReference: string; valueUBA: string; feeUBA: string }[];
+  settlements: { requestId: string; deliveredDrops: string; txXrpl: string; paymentReference: string }[];
+}
 
 function Stepper({ active }: { active: number }) {
   return (
@@ -32,13 +44,18 @@ export function Claim() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<string | null>(null);
+  const [drill, setDrill] = useState<DrillResult | "running" | null>(null);
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       setV(await readVault(address));
       const r = await fetch(`${CONFIG.api}/vaults/${address}`);
-      if (r.ok) setEvents((await r.json()).events ?? []);
+      if (r.ok) {
+        const j = await r.json();
+        setEvents(j.events ?? []);
+        if (j.receipt) setReceipt(j.receipt);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -84,20 +101,21 @@ export function Claim() {
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); await refresh(); }
   }
 
+  // the drill runs a staticCall server-side and reports CHAIN truth —
+  // "blocked as designed" is only ever shown when the contract actually refused
   async function testEarlyClaim() {
-    setTestResult(null);
-    setTestResult("running");
+    setDrill("running");
     try {
-      const body: Record<string, string> = { beneficiaryXrpl: bene.trim() };
-      if (ownerFromKit.trim()) body.ownerXrpl = ownerFromKit.trim();
-      await fetch(`${CONFIG.api}/vaults/${address}/claim`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      const r = await fetch(`${CONFIG.api}/vaults/${address}/simulate-early-claim`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ beneficiaryXrpl: bene.trim() }),
       });
-      // the on-chain outcome lands in the timeline; summarize the design here
-      setTestResult("done");
-    } catch {
-      setTestResult("done");
-    }
+      if (!r.ok) throw new Error(await r.text());
+      setDrill(await r.json());
+    } catch (e) {
+      setDrill(null);
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally { await refresh(); }
   }
 
   if (!v) return <main className="wrap" style={{ padding: "60px 24px" }}><p className="mono">loading…</p></main>;
@@ -123,9 +141,9 @@ export function Claim() {
         <div>
           {v.state === 2 && (
             <div className="card">
-              <h3 style={{ marginBottom: 10 }}>Step 1 — verify your wallet</h3>
+              <h3 style={{ marginBottom: 10 }}>Step 1 — confirm the beneficiary address</h3>
               <div className="field">
-                <label>Your XRPL address (must match the one the owner chose)</label>
+                <label>Your XRPL address (must match the one the owner chose — no signature needed here)</label>
                 <input placeholder="r…" value={bene} onChange={(e) => setBene(e.target.value)} />
                 {bene && !beneMatches && <span className="hint" style={{ color: "var(--ember)" }}>This address does not match the beneficiary fingerprint.</span>}
                 {beneMatches && <span className="hint" style={{ color: "var(--verdant)" }}>✓ matches the plan's beneficiary</span>}
@@ -148,20 +166,23 @@ export function Claim() {
                     The owner is still inside their window — a real claim is not available until{" "}
                     {new Date(v.silenceDeadline * 1000).toLocaleTimeString()}.
                   </div>
-                  <button className="btn btn-ghost" disabled={!beneMatches || testResult === "running"} onClick={testEarlyClaim}>
-                    {testResult === "running" ? "Testing…" : "Test early-claim protection"}
+                  <button className="btn btn-ghost" disabled={!beneMatches || drill === "running"} onClick={testEarlyClaim}>
+                    {drill === "running" ? "Asking the contract…" : "Test early-claim protection"}
                   </button>
-                  {testResult === "done" && (
+                  {drill && drill !== "running" && drill.blocked && (
                     <div className="notice ok" style={{ marginTop: 12 }}>
-                      <strong>Blocked as designed.</strong>{" "}
-                      {v.ownerEvm !== "0x0000000000000000000000000000000000000000" ? (
-                        <>While the owner keeps checking in, Flare's consensus clock refuses the claim — the
-                        vault reverts (<span className="mono">SilenceNotProven</span>).</>
-                      ) : (
-                        <>While the owner lives, the silence proof cannot be produced (<span className="mono">REFERENCED
-                        TRANSACTION EXISTS</span>) and the vault reverts (<span className="mono">SilenceNotProven</span>).</>
-                      )}{" "}
-                      Funds moved: 0. Owner control: intact. The attempt appears in the journey below.
+                      <strong>Blocked on-chain.</strong> The contract refused with{" "}
+                      <span className="mono">{drill.reason}</span>
+                      {drill.detail ? <> — {drill.detail}</> : null}. Funds moved: {drill.fundsMoved}. Owner
+                      control: intact. This was a real <span className="mono">staticCall</span> against the
+                      vault — not an assumption; the drill appears in the journey below.
+                    </div>
+                  )}
+                  {drill && drill !== "running" && !drill.blocked && (
+                    <div className="notice" style={{ marginTop: 12 }}>
+                      <strong>The inactivity window has already elapsed</strong> — the contract would accept a
+                      claim now (nothing was executed). If this is a rehearsal, ask the owner to send a
+                      heartbeat first, then run the drill again.
                     </div>
                   )}
                 </>
@@ -193,8 +214,16 @@ export function Claim() {
             <div className="card" style={{ borderColor: "color-mix(in srgb, var(--verdant) 45%, transparent)" }}>
               <h3 style={{ marginBottom: 12 }}>Payout receipt</h3>
               <div className="status-grid">
-                <div className="stat"><div className="k">Delivered</div><div className="v">{settled.length ? settled.map((s) => s.label.match(/([\d.]+) XRP/)?.[1]).filter(Boolean).join(" + ") + " XRP" : "—"}</div></div>
-                <div className="stat"><div className="k">Redemption</div><div className="v mono">{released?.label.match(/#\d+/g)?.join(", ") ?? "—"}</div></div>
+                <div className="stat"><div className="k">Delivered</div><div className="v">{
+                  receipt?.settlements.length
+                    ? receipt.settlements.map((s) => (Number(s.deliveredDrops) / 1e6).toFixed(2)).join(" + ") + " XRP"
+                    : settled.length ? settled.map((s) => s.label.match(/([\d.]+) XRP/)?.[1]).filter(Boolean).join(" + ") + " XRP" : "—"
+                }</div></div>
+                <div className="stat"><div className="k">Redemption</div><div className="v mono">{
+                  receipt?.redemptions.length
+                    ? receipt.redemptions.map((r) => `#${r.requestId}`).join(", ")
+                    : released?.label.match(/#\d+/g)?.join(", ") ?? "—"
+                }</div></div>
                 <div className="stat"><div className="k">Remaining in vault</div><div className="v">{fmtFxrp(v.fxrpBalance)} FXRP</div></div>
                 {settled[0]?.txXrpl && (
                   <div className="stat" style={{ gridColumn: "1 / -1" }}>

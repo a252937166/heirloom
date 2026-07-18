@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { PulseDial } from "../components/PulseDial";
 import { CONFIG } from "../config";
-import { VaultView, fmtFxrp, readVault, short } from "../lib/chain";
+import { VaultView, addrHash, fmtFxrp, readVault, short } from "../lib/chain";
 import { useWallet } from "../App";
 import { payWithMemo } from "../lib/gem";
 import { cancelEvmTx, friendlyEvmError, heartbeatEvmTx } from "../lib/evm";
@@ -57,7 +57,7 @@ const HEADLINES: Record<number, { title: string; sub: string }> = {
   2: { title: "Your continuity plan is active", sub: "Send a heartbeat within the window and nothing can move." },
   3: { title: "A claim has started", sub: "One heartbeat from you cancels it — this is your veto window." },
   4: { title: "XRP is being redeemed", sub: "The FAssets redemption is paying out to your beneficiary." },
-  5: { title: "The plan completed", sub: "Everything was redeemed to the beneficiary's XRPL wallet." },
+  5: { title: "The plan settled", sub: "Every redeemable amount reached the beneficiary; any residual below the protocol minimum stays visible here." },
   6: { title: "Plan cancelled", sub: "The vault redeemed everything back to your XRPL wallet." },
 };
 
@@ -209,9 +209,20 @@ export function Vault() {
         <div>
           <div className="status-grid">
             <div className="stat"><div className="k">Protected</div><div className="v">{fmtFxrp(v.fxrpBalance)} FXRP</div></div>
-            <div className="stat"><div className="k">Heartbeats proven</div><div className="v">{v.heartbeatEpoch}</div></div>
-            <div className="stat"><div className="k">Next deadline</div><div className="v">{new Date((v.state === 3 ? v.claimChallengeEndsAt : v.silenceDeadline) * 1000).toLocaleTimeString()}</div></div>
+            <div className="stat"><div className="k">{isEvmPlan ? "Check-ins recorded" : "Heartbeats proven"}</div><div className="v">{v.heartbeatEpoch}</div></div>
+            <div className="stat"><div className="k">Next deadline</div><div className="v" title={new Date((v.state === 3 ? v.claimChallengeEndsAt : v.silenceDeadline) * 1000).toISOString()}>{new Date((v.state === 3 ? v.claimChallengeEndsAt : v.silenceDeadline) * 1000).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short" })}</div></div>
             <div className="stat"><div className="k">Rules</div><div className="v">{Math.round(v.heartbeatPeriod / 60)}m + {Math.round(v.gracePeriod / 60)}m grace · {Math.round(v.challengePeriod / 60)}m veto</div></div>
+          </div>
+
+          <div className="mono" style={{ fontSize: "0.7rem", color: "var(--mist-2)", marginTop: 10, display: "flex", gap: 16, flexWrap: "wrap", alignItems: "baseline" }}>
+            <span>owner mode: {isEvmPlan ? `EVM one-click (${short(v.ownerEvm, 6)})` : "XRPL heartbeats (FDC-proven)"}</span>
+            <span>beneficiary fingerprint: {v.beneficiaryXrplHash.slice(2, 8)}····{v.beneficiaryXrplHash.slice(-6)}</span>
+            {!isEvmPlan && wallet.address && (addrHash(wallet.address) === v.ownerXrplHash
+              ? <span style={{ color: "var(--verdant)" }}>✓ connected wallet is this plan's owner</span>
+              : <span style={{ color: "var(--ember)" }}>⚠ connected wallet is NOT this plan's owner</span>)}
+            {isEvmPlan && evm.address && (evm.address.toLowerCase() === v.ownerEvm.toLowerCase()
+              ? <span style={{ color: "var(--verdant)" }}>✓ connected account is this plan's owner</span>
+              : <span style={{ color: "var(--ember)" }}>⚠ connected account is NOT this plan's owner</span>)}
           </div>
 
           <div className="card" style={{ marginTop: 20 }}>

@@ -187,3 +187,22 @@ input::placeholder { color: var(--mist-2); font-family: var(--font-body); }
 .pulse { animation: hl-pulse 1.6s ease-in-out infinite; }
 .menu-row { transition: background 0.12s; }
 .menu-row:hover { background: color-mix(in srgb, var(--lamplight) 8%, transparent); }
+
+@media (max-width: 700px) {
+  .rail-row { min-width: 0 !important; flex-wrap: wrap; }
+  .rail-sep { display: none; }
+  .chapter-label { display: none; }
+}
+
+.burger { display: none; }
+@media (max-width: 860px) {
+  .nav-item { display: none !important; }
+  .burger { display: inline-flex; }
+}
+@media (max-width: 900px) {
+  .hero-grid { grid-template-columns: 1fr !important; text-align: left; }
+  .hero-grid > div:last-child { justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .pulse { animation: none; }
+}

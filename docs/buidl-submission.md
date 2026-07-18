@@ -35,7 +35,7 @@ Live app: **https://heirloom.axiqo.xyz** · GitHub: https://github.com/a25293716
 
 Heirloom is the non-custodial answer, and it is only possible on Flare:
 
-- **FAssets** custodies the XRP programmatically (direct mint in, redemption out) — the owner funds a personal vault contract with **one ordinary XRPL payment**, no EVM wallet ever.
+- **FAssets** custodies the XRP programmatically (direct mint in, redemption out) — the owner funds a personal vault contract with **one ordinary XRPL payment**, the XRP-native path never needs an EVM wallet.
 - **FDC `XRPPayment`** proves owner-signed facts: 1-drop heartbeats reset the dial; a special memo cancels and refunds; the funding payment itself is proven and minted.
 - **FDC `ReferencedPaymentNonexistence`** — the industry's only consensus **proof of absence** — proves the silence, source-filtered so nobody can fake the owner's liveness, chained ledger-by-ledger so nobody can skip a heartbeat.
 
@@ -51,7 +51,7 @@ Local lifecycle (vault `0x22d820…8826`) and the **production stack** (live kee
 
 | step | evidence |
 |---|---|
-| Fund with one XRPL payment | 32-byte recipient memo → `executeDirectMinting` → **19.96 / 10.08 FXRP** minted straight into the vault clone |
+| Fund with one XRPL payment | 32-byte recipient memo → `executeDirectMinting` → **Case #001: 10.08 FXRP protected → 9.95 XRP delivered, 0.08 residual disclosed** minted straight into the vault clone |
 | Heartbeat | XRPL tx attested (rounds 1398606 / 1398650) → `recordHeartbeat` |
 | Silence | source-filtered RPN chained from heartbeat ledger + 1 (rounds 1398610 / on-chain `0x6f89bcd7…`) |
 | Claim → challenge → release | `ClaimStarted` → `ChallengeNotOver` enforced → `executeRelease` |

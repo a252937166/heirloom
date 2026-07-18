@@ -62,8 +62,9 @@ are identical. What differs:
 
 - Demo timing (minutes, clearly labelled) on Coston2; production timing is a config change.
 - One beneficiary per vault; value-split across several heirs is roadmap.
-- A residual below the 5-FXRP protocol redemption minimum stays visible in the vault (full-balance
-  `redeemAmount` makes this ~zero in practice; the payout receipt always states the exact remainder).
+- On release the vault redeems the maximum the FAssets protocol accepts; a residual below the protocol
+  redemption minimum stays publicly visible in the vault and the payout receipt states it exactly —
+  disclosed, never rounded away.
 - The keeper currently also acts as the direct-minting executor; any party can replace it.
 - Legal standing: transferring key control is not the same as transferring legal title. Pair Heirloom
   with a will that names the same beneficiary.
