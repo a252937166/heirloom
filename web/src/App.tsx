@@ -7,6 +7,7 @@ import { Claim } from "./pages/Claim";
 import { Kit } from "./pages/Kit";
 import { CaseStudy } from "./pages/CaseStudy";
 import { WalletModal } from "./components/WalletModal";
+import { FlareMark } from "./components/FlareMark";
 import { WalletState, connectWallet, fundTestXrp, xrpBalance } from "./lib/gem";
 import { EVM_NONE, EvmState, WalletOption, connectWith, disconnectEvm, retrySwitch } from "./lib/evm";
 import { CONFIG } from "./config";
@@ -146,6 +147,10 @@ export default function App() {
               Heirloom<span style={{ color: "var(--lamplight)" }}>.</span>
             </Link>
             <span className="pill" style={{ fontSize: "0.55rem", letterSpacing: "0.12em", padding: "3px 8px", color: "var(--mist-2)" }}>TESTNET</span>
+            <a href="https://dev.flare.network" target="_blank" rel="noreferrer" className="mono" title="Built on Flare"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.62rem", color: "var(--mist-2)", textDecoration: "none" }}>
+              on <FlareMark size={14} />
+            </a>
           </span>
           <nav style={{ display: "flex", gap: 20, alignItems: "stretch", alignSelf: "stretch", flex: 1, minWidth: 0 }}>
             {[
@@ -369,7 +374,7 @@ export default function App() {
             <strong>Honest boundaries.</strong> Heirloom never holds your keys, cannot change your recipient, and
             cannot release funds before the configured inactivity and challenge periods have both elapsed. Settlement
             relies on Flare FAssets, FDC consensus, and the XRP Ledger. Heirloom is a technical continuity mechanism —
-            not a substitute for a legally valid will. Running on Flare <span className="mono">Coston2</span> testnet
+            not a substitute for a legally valid will. Running on <FlareMark size={13} /> <span className="mono">Coston2</span> testnet
             with demo timing.
           </p>
         </div>
