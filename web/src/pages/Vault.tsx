@@ -59,6 +59,7 @@ const HEADLINES: Record<number, { title: string; sub: string }> = {
   4: { title: "XRP is being redeemed", sub: "The FAssets redemption is paying out to your beneficiary." },
   5: { title: "The plan settled", sub: "Every redeemable amount reached the beneficiary; any residual below the protocol minimum stays visible here." },
   6: { title: "Plan cancelled", sub: "The vault redeemed everything back to your XRPL wallet." },
+  7: { title: "Cancelling — value returning to you", sub: "FAssets is settling the cancel redemption; anyone can crank the remainder. Nothing goes to the beneficiary." },
 };
 
 export function Vault() {
@@ -165,7 +166,7 @@ export function Vault() {
   const now = Math.floor(Date.now() / 1000);
   const dueSoon = v.state === 2 && v.silenceDeadline - now < v.heartbeatPeriod * 0.25;
   const head = HEADLINES[v.state] ?? { title: "Continuity plan", sub: "" };
-  const tone = v.state === 2 ? (dueSoon ? "warn" : "alive") : v.state === 3 || v.state === 4 ? "warn" : "gold";
+  const tone = v.state === 2 ? (dueSoon ? "warn" : "alive") : v.state === 3 || v.state === 4 || v.state === 7 ? "warn" : "gold";
   const isEvmPlan = v.ownerEvm !== ZERO_EVM;
   const headSub = v.state === 6 && isEvmPlan ? "The vault handed all FXRP back to your connected wallet." : head.sub;
 
@@ -188,7 +189,7 @@ export function Vault() {
           <h1 style={{ fontSize: "2rem", margin: "8px 0 4px" }}>{dueSoon ? "Your check-in is due" : head.title}</h1>
           <p style={{ fontSize: "0.92rem" }}>{headSub}</p>
         </div>
-        <span className={`pill ${tone}`}>● {["", "Awaiting funding", dueSoon ? "Check-in due" : "Healthy", "Claim pending", "Releasing", "Released", "Cancelled"][v.state]}</span>
+        <span className={`pill ${tone}`}>● {["", "Awaiting funding", dueSoon ? "Check-in due" : "Healthy", "Claim pending", "Releasing", "Released", "Cancelled", "Cancelling"][v.state]}</span>
       </div>
 
       {err && <div className="notice err" style={{ margin: "16px 0" }}>{err}</div>}

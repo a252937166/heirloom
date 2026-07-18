@@ -12,7 +12,7 @@
 | Category | Crypto/Web3 → 子类勾 `DeFi` + `Infra`（若有 RWA/Consumer 选项可加） |
 | L1s | `Flare` |
 | AI Agent | **No** |
-| Website | `https://heirloom.axiqo.xyz` |
+| Website | `https://heirloom.axiqo.xyz` (footer 与 /api/health 显示与提交 tag 相同的 build SHA) |
 | GitHub | `https://github.com/a252937166/heirloom` |
 | Demo video | （视频上传后填 YouTube 链接） |
 | Social | 现有 X 账号主页 |
@@ -68,7 +68,7 @@ drove the next contract revision.
 
 In the flagship XRP-native mode, the EVM side has **no privileged user key**. Every state change is authorized by an XRPL event proven by FDC, or a public timeout; every keeper action is a permissionless crank anyone could submit from public data (we watched a third-party executor beat our own keeper to a mint — the vault didn't care).
 
-Contracts: `HeirloomVault` (7-state machine, dual-proof validation, challenge veto, XRPL-signed cancel, EVM-owner mode with consensus-time silence) + `HeirloomFactory` (EIP-1167 clone per plan). Factory (v4, source-verified): `0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f` (Coston2). 19 unit tests incl. adversarial, veto-race and partial-redemption suites.
+Contracts: `HeirloomVault` (explicit lifecycle state machine — 8 states incl. re-crankable `Cancelling`, dual-proof validation, challenge veto + veto-proof grace, XRPL-signed cancel, alternative EVM-owner mode) + `HeirloomFactory` (EIP-1167 clone per plan). Factory (v4, source-verified): `0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f` (Coston2). 19 unit tests incl. adversarial, veto-race and partial-redemption suites.
 
 App: the **Live Case Dashboard** (`/case/001`) replays one real completed lifecycle in seven chapters — dual-ledger transaction rail, two attack drills, and a reconciled payout receipt whose five integrity checks are generated from chain data by `spike/build-case.mjs`, plus a 90-second guided tour. Create a plan in 60 seconds (GemWallet first; MetaMask/OKX auto-adds Coston2 for one-click check-ins; or any XRPL wallet via copyable instructions), a living Pulse Dial, an evidence timeline where every entry links to a public transaction, and a printable **Recovery Kit** so the beneficiary can claim without our help.
 
@@ -90,7 +90,7 @@ Mainnet with 90–180-day periods and 7-day rolling checkpoints · lost-key self
 - Live case（60 秒无钱包审计线路）: https://heirloom.axiqo.xyz/case/001
 - Live: https://heirloom.axiqo.xyz （创建自己的金库全程真实交易；GemWallet 优先，MetaMask/OKX 自动加 Coston2）
 - Factory explorer (v4): https://coston2-explorer.flare.network/address/0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f
-- 两次完整生命周期的关键 tx 全在 README 表格（含 XRPL payout 双证）
+- Canonical v4 生命周期与历史 provenance 全部见 README（一个当前案例、一套数字、一条主证据链）
 
 ## Team / Contact
 

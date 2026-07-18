@@ -104,7 +104,7 @@ export function Landing() {
       {/* 2 · metric cards */}
       <section className="wrap rise" style={{ padding: "0 24px 30px", animationDelay: "0.08s" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-          <div className="metric"><span className="ic">▦</span><span><b>{stats.plans === null ? "…" : <Count text={String(stats.plans)} />}</b><span className="lbl">Plans created</span></span></div>
+          <div className="metric"><span className="ic">▦</span><span><b>{stats.plans === null ? "…" : <Count text={String(stats.plans)} />}</b><span className="lbl">Testnet vaults created</span></span></div>
           <div className="metric"><span className="ic green">◈</span><span><b>{stats.protectedXrp === null ? "…" : <Count text={`${stats.protectedXrp} FXRP`} />}</b><span className="lbl">Protected (sampled plans)</span></span></div>
           <div className="metric"><span className="ic violet">⇄</span><span><b><Count text={`${mcase.payoutXrp} XRP`} /></b><span className="lbl">Delivered in Case #001</span></span></div>
           <div className="metric"><span className="ic orange">⛨</span><span><b>0</b><span className="lbl">Heirloom-held keys</span></span></div>
@@ -113,7 +113,7 @@ export function Landing() {
           {[
             ["✍", "You keep control", "cancel anytime with one XRPL payment"],
             ["✕", "Nobody can claim early", "strict rules on-chain block premature access"],
-            ["♥", "XRP reaches your family", "native XRP to their wallet, automatically"],
+            ["♥", "XRP reaches the person you chose", "redemptions settle to their XRPL wallet; collateral-protected if an agent defaults"],
             ["◎", "Proven on two ledgers", "XRPL events + Flare proofs make it verifiable"],
           ].map(([ic, t, s]) => (
             <div key={t} style={{ display: "flex", gap: 11, alignItems: "flex-start", border: "1px solid var(--line)", borderRadius: 13, padding: "13px 15px", background: "color-mix(in srgb, var(--paper) 1.5%, transparent)" }}>

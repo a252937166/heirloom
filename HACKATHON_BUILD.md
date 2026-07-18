@@ -21,5 +21,5 @@ Chronology (see `git log` for the full record):
    silence proof → challenge + 180s veto-proof grace → FULL-balance FAssets redemption → 10.03 XRP on the
    beneficiary's wallet → final balance 0.
 
-Frozen submission state: tag `submission-v1` (v4 contracts + the fully-reconciled v4 canonical case); regenerate the case manifest with
+Frozen submission state: tag `submission-v3` — the tag's commit is the single source of truth and is shown verbatim in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
 `node spike/build-case.mjs`.

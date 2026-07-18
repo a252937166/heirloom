@@ -320,17 +320,24 @@ export function Create() {
           ) : (
             !paidTx && (
               <>
-                <div className="status-grid" style={{ marginBottom: 14 }}>
-                  <div className="stat"><div className="k">Send exactly</div><div className="v">{(Number(quote?.exactPaymentDrops ?? created.grossDrops) / 1e6).toFixed(2)} XRP</div></div>
-                  <div className="stat"><div className="k">To (quoted live)</div><div className="v mono">{quote?.paymentAddress ?? CONFIG.coreVaultXrpl}</div></div>
-                  <div className="stat" style={{ gridColumn: "1 / -1" }}><div className="k">Memo (routes the mint to your vault)</div><div className="v mono">{created.fundingMemo}</div></div>
-                </div>
+                {quote ? (
+                  <div className="status-grid" style={{ marginBottom: 14 }}>
+                    <div className="stat"><div className="k">Send exactly (live testnet quote)</div><div className="v">{(Number(quote.exactPaymentDrops) / 1e6).toFixed(2)} XRP</div></div>
+                    <div className="stat"><div className="k">To</div><div className="v mono">{quote.paymentAddress}</div></div>
+                    <div className="stat" style={{ gridColumn: "1 / -1" }}><div className="k">Memo (routes the mint to your vault)</div><div className="v mono">{created.fundingMemo}</div></div>
+                  </div>
+                ) : (
+                  <div className="notice" style={{ marginBottom: 14, display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                    <span>Fetching a live payment quote — manual payment details unlock once it arrives (never pay from stale numbers).</span>
+                    <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: "0.76rem" }} onClick={() => freshQuote().catch(() => {})}>Retry</button>
+                  </div>
+                )}
                 <div className="field">
                   <label>After sending, paste your XRPL transaction hash</label>
                   <input placeholder="64-character hash…" value={manualTx} onChange={(e) => setManualTx(e.target.value.trim())} />
                   <span className="hint">The keeper also auto-detects core-vault payments within ~30 s — the hash just makes it instant.</span>
                 </div>
-                <button className="btn btn-primary" disabled={busy} onClick={submitManualTx}>I've sent it — track my payment</button>
+                <button className="btn btn-primary" disabled={busy || !quote} onClick={submitManualTx}>I've sent it — track my payment</button>
               </>
             )
           )}
