@@ -59,11 +59,32 @@ code, .mono { font-family: var(--font-mono); font-size: 0.85em; }
   cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s, border-color 0.12s;
 }
 .btn:focus-visible { outline: 2px solid var(--lamplight); outline-offset: 3px; }
-.btn-primary { background: var(--lamplight); color: #fff; box-shadow: 0 6px 22px color-mix(in srgb, var(--lamplight) 30%, transparent); }
-.btn-primary:hover { background: var(--lamplight-strong); transform: translateY(-1px); text-decoration: none; }
-.btn-ghost { background: color-mix(in srgb, var(--paper) 3%, transparent); color: var(--paper); border-color: var(--line); }
-.btn-ghost:hover { border-color: var(--mist-2); text-decoration: none; }
-.btn-warn { background: var(--ember); color: #1a1206; font-weight: 700; box-shadow: 0 6px 22px color-mix(in srgb, var(--ember) 30%, transparent); }
+.btn-primary {
+  background: linear-gradient(180deg, #6d8bff 0%, var(--lamplight) 55%, #4a63e6 100%);
+  color: #fff;
+  border-color: color-mix(in srgb, var(--lamplight-strong) 55%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 4px 14px -4px color-mix(in srgb, var(--lamplight) 55%, transparent);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
+}
+.btn-primary:hover {
+  background: linear-gradient(180deg, #7d97ff 0%, #6d8bff 55%, #5570f0 100%);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), 0 8px 20px -6px color-mix(in srgb, var(--lamplight) 65%, transparent);
+  text-decoration: none;
+}
+.btn-ghost {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--paper) 5%, transparent), color-mix(in srgb, var(--paper) 2%, transparent));
+  color: var(--paper);
+  border-color: color-mix(in srgb, var(--paper) 14%, var(--line));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.btn-ghost:hover { border-color: color-mix(in srgb, var(--lamplight) 45%, var(--line)); background: color-mix(in srgb, var(--lamplight) 7%, transparent); text-decoration: none; }
+.btn-warn {
+  background: linear-gradient(180deg, #ffa25e 0%, var(--ember) 60%, #f0762a 100%);
+  color: #1a1206; font-weight: 700;
+  border-color: color-mix(in srgb, var(--ember) 60%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 4px 14px -4px color-mix(in srgb, var(--ember) 55%, transparent);
+}
 .btn-warn:hover { filter: brightness(1.08); transform: translateY(-1px); }
 .btn-violet { background: var(--violet); color: #fff; }
 .btn-violet:hover { filter: brightness(1.1); }
@@ -220,6 +241,17 @@ input::placeholder { color: var(--mist-2); font-family: var(--font-body); }
   .rail-row { min-width: 0 !important; flex-wrap: wrap; }
   .rail-sep { display: none; }
   .chapter-label { display: none; }
+}
+
+/* the header must feel bolted on: near-solid backdrop + a grounding shadow,
+   so scrolling content (and the aurora) never shimmers through it */
+.site-header {
+  position: sticky; top: 0; z-index: 40;
+  background: linear-gradient(180deg, rgba(10, 11, 18, 0.985) 0%, rgba(12, 13, 22, 0.94) 100%);
+  backdrop-filter: blur(12px) saturate(1.25);
+  -webkit-backdrop-filter: blur(12px) saturate(1.25);
+  border-bottom: 1px solid color-mix(in srgb, var(--paper) 9%, var(--line));
+  box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.9);
 }
 
 .burger { display: none; }
