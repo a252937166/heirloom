@@ -6,7 +6,8 @@ contract, not by our servers.
 
 ## Authorization model
 
-The EVM side has **no privileged keys**. Every state change is authorized by one of:
+In the flagship XRP-native mode, the EVM side has **no privileged user keys** (the alternative EVM-owner
+mode uses the owner's own wallet key — and only theirs). Every state change is authorized by one of:
 
 1. an owner-signed XRPL payment, proven by an FDC `XRPPayment` attestation (heartbeat, cancel, funding);
 2. a consensus proof of absence (`ReferencedPaymentNonexistence`) that anyone may submit;
@@ -26,8 +27,8 @@ open-source service against the same contracts.
 | 4 | **Silence ≠ death** — hospital stays, lost phones, travel | Grace period + challenge window are first-class config. The owner's veto is a single 1-drop payment from anywhere in the world. Roadmap: multi-channel expiry reminders. |
 | 5 | **Keeper censorship or death** | All cranks are permissionless; the beneficiary's Recovery Kit contains everything needed to claim without us. Keeper is open source. |
 | 6 | **Wrong beneficiary address** | The address is committed as a hash at creation and revealed at claim; the UI shows a fingerprint at both ends and the Recovery Kit repeats it. Nothing can change it after creation except the owner cancelling and re-creating — by design. |
-| 7 | **FAssets redemption risk** — agent fails to pay the underlying XRP | The keeper watches the underlying window; once the agent misses it, a non-payment proof (`ReferencedPaymentNonexistence`, no source filter) triggers `redemptionPaymentDefault` and protocol collateral compensation is secured to the vault (Flare-side assets; distribution to the XRPL-only beneficiary is roadmap and disclosed). The `Releasing` state stays re-crankable. The vault redeems its **full balance** via `redeemAmount` (arbitrary amounts, no lot rounding); only a residual below the protocol's 5-FXRP redemption minimum can ever remain, in which case the vault closes honestly with a `ResidualBelowMinimum` event and the receipt shows the exact remainder. |
-| 8 | **Direct-minting edge cases** — payment below minimum fee is forfeited by the protocol; wrong memo strands the mint | The app computes the gross amount with a safety margin and renders the exact memo; the keeper watches for `DirectMintingExecuted`. Recovery guidance for stuck mints is part of the funding screen. |
+| 7 | **FAssets redemption risk** — agent fails to pay the underlying XRP | The keeper watches the underlying window; once the agent misses it, a non-payment proof (`ReferencedPaymentNonexistence`, no source filter) triggers `redemptionPaymentDefault` and protocol collateral compensation is secured to the vault (Flare-side assets; distribution to the XRPL-only beneficiary is roadmap and disclosed). The claim page offers a **one-click, permissionless recover-collateral action — nothing fires automatically**. The `Releasing` state stays re-crankable. The vault redeems its **full balance** via `redeemAmount` (arbitrary amounts, no lot rounding); only a residual below the protocol's redemption minimum (`minimumRedeemAmountUBA()`, 5 FXRP on Coston2) can ever remain, in which case the vault closes honestly with a `ResidualBelowMinimum` event and the receipt shows the exact remainder. |
+| 8 | **Direct-minting edge cases** — payment below minimum fee is forfeited by the protocol; wrong memo strands the mint; the protocol defers mints over its rate limits | **Live protocol data, no guesswork.** The quote endpoint computes the exact gross from the AssetManager's live direct-minting settings (fee BIPS, minimum fee, executor fee — no static margin) and pays to the live `directMintingPaymentAddress()`; quotes expire after 120s and the UI refuses stale ones. Deferred/large mints are honored via the protocol's own delay state: the keeper re-executes the SAME proof after `executionAllowedAt` — no second payment is ever needed. The minimum-fee floor is priced into every quote, and recovery guidance for stuck mints is part of the funding screen. |
 | 9 | **Veto/release race** — the owner heartbeats seconds before the challenge cutoff, but the FDC proof lands 90-180s later, after a release crank | **Solved in v4.** Release is only eligible after `challengeEnd + vetoProofGrace`; during the grace window a heartbeat whose XRPL timestamp is ≤ the cutoff still vetoes. The XRPL timestamp decides — never transaction ordering. |
 | 10 | **Partial cancel redemption** — FAssets fulfils a redemption only partially and the vault is already terminal | **Solved in v4.** Cancel enters a re-crankable `Cancelling` state (`cancelCrank()`, permissionless) until the balance settles to zero or below the protocol minimum. Funds can never lock. |
 | 11 | **FCC / privacy expectations** | Heirloom does **not** claim private settlement: the final payout is a public XRPL transaction. On-chain, owner/beneficiary/beacon appear only as hashes until claim time — correlation from XRPL activity is possible and documented. |
@@ -42,7 +43,7 @@ open-source service against the same contracts.
 - **Attestation history window** — measured at ~14 days on Coston2's verifiers; production vaults therefore
   use 7-day rolling checkpoints (implemented and chain-tested) rather than single long windows.
 
-## EVM-owner mode (v3) — what changes, honestly
+## Alternative EVM-owner mode (introduced in v3; current contract v4) — what changes, honestly
 
 For owners without an XRPL wallet, a vault can be configured with `ownerEvm` (MetaMask/OKX) instead of an
 XRPL owner hash. The state machine, challenge veto, and FAssets redemption to the beneficiary's XRPL wallet
@@ -60,7 +61,7 @@ are identical. What differs:
 - **Mode exclusivity.** A vault is one mode or the other, checked at initialization; XRPL proof paths revert
   in EVM mode and vice versa, so the two silence clocks can never be mixed on one vault.
 
-## Known limitations (v1)
+## Known limitations of the current submission
 
 - Demo timing (minutes, clearly labelled) on Coston2; production timing is a config change.
 - One beneficiary per vault; value-split across several heirs is roadmap.

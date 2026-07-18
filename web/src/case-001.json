@@ -1,13 +1,15 @@
 {
   "id": "case-001",
-  "builtAt": "2026-07-18T10:25:31.919Z",
+  "builtAt": "2026-07-18T14:08:26.447Z",
   "network": "Flare Coston2 + XRPL Testnet",
   "truth": "Real XRPL transactions · Real FDC attestations · Real Coston2 contracts · Real XRP Testnet payout — demo identities, compressed timing",
   "vault": "0x35975770e1eD5431e0bFCaBB238B6188c94AeAdA",
   "finalState": 5,
   "verdict": "SETTLED · FULLY RECONCILED",
   "protectedFxrp": "10.07569",
-  "payoutXrp": "10.03",
+  "protectedFxrpSource": "chain",
+  "payoutXrp": "10.025312",
+  "payoutXrpSource": "chain",
   "finalFxrpBalance": "0",
   "heartbeatEpochs": 1,
   "fdcRounds": [
@@ -43,8 +45,12 @@
   },
   "releaseTxFlare": "0x39f055c0b07c02daff7e364283e79d98b3d1d58d84069d45a8e72f9e8d83e744",
   "challenge": {
-    "startedAt": 1784369514,
-    "endedAt": 1784369634
+    "startedAt": 1784369513,
+    "heartbeatCutoffAt": 1784369633,
+    "vetoProofGraceSec": 180,
+    "releaseEligibleAt": 1784369813,
+    "releaseExecutedAt": 1784369823,
+    "endedAt": 1784369633
   },
   "residualNote": null,
   "integrityChecks": [
@@ -57,7 +63,7 @@
       "passed": true
     },
     {
-      "label": "Challenge window fully elapsed before the release executed",
+      "label": "Challenge and veto-proof grace fully elapsed before release (verified from chain block timestamps)",
       "passed": true
     },
     {
@@ -65,7 +71,7 @@
       "passed": true
     },
     {
-      "label": "All key claims carry public transaction hashes",
+      "label": "All nine lifecycle claims carry public transaction hashes",
       "passed": true
     }
   ]

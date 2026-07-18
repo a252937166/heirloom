@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { CONFIG } from "../config";
 import { VaultView, readVault, short } from "../lib/chain";
+import { buildRecoveryManifest, downloadManifest } from "../lib/recovery";
 
 interface Recovery {
   ownerXrpl: string | null;
@@ -23,49 +24,56 @@ export function Kit() {
   const url = `${window.location.origin}/claim/${address}`;
   const kitId = `HL-${address.slice(2, 6).toUpperCase()}-${address.slice(-4).toUpperCase()}`;
 
-  useEffect(() => {
+  const load = useCallback(() => {
     readVault(address).then(setV).catch(() => {});
     fetch(`${CONFIG.api}/vaults/${address}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => j && setRec(j.recovery))
       .catch(() => {});
+  }, [address]);
+
+  useEffect(() => {
+    load();
     QRCode.toDataURL(url, { width: 260, margin: 1, color: { dark: "#0E1526", light: "#FFFFFF" } }).then(setQr).catch(() => {});
-  }, [address, url]);
+  }, [load, url]);
+
+  // a recovery file with null fields is worse than no file: gate the download
+  // on every load-bearing field being present (keeper + chain both answered)
+  const incomplete = !v || !rec || !rec.reference || !(rec.ownerXrpl || rec.ownerEvm) || !rec.beneficiaryXrpl;
 
   return (
     <main className="wrap kit-sheet" style={{ padding: "44px 24px", maxWidth: 720 }}>
       <div className="no-print" style={{ marginBottom: 22, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <button className="btn btn-primary" onClick={() => window.print()}>Print / save as PDF</button>
-        <button className="btn btn-ghost" onClick={() => {
-          // self-contained recovery manifest: everything needed to rebuild every
-          // proof and finish a claim even if Heirloom disappears — no secrets inside
-          const manifest = {
-            kitId,
+        <button className="btn btn-ghost" disabled={incomplete} style={incomplete ? { opacity: 0.5, cursor: "not-allowed" } : undefined} onClick={() => {
+          if (incomplete || !v || !rec) return;
+          downloadManifest(buildRecoveryManifest({
             vault: address,
-            network: { flare: "Coston2 (chainId 114)", xrpl: "testnet" },
-            contracts: { factory: CONFIG.factory, fxrp: CONFIG.fxrp, assetManager: CONFIG.assetManager },
-            owner: rec?.ownerXrpl ?? rec?.ownerEvm ?? null,
-            ownerMode: rec?.mode ?? "xrpl",
-            beneficiary: rec?.beneficiaryXrpl ?? null,
-            heartbeatBeacon: rec?.beacon ?? CONFIG.beacon,
-            heartbeatReference: rec?.reference ?? null,
+            ownerMode: rec.mode === "evm" ? "evm" : "xrpl",
+            owner: (rec.ownerXrpl ?? rec.ownerEvm)!,
+            beneficiaryXrpl: rec.beneficiaryXrpl!,
+            heartbeatReference: rec.reference!,
+            beacon: rec.beacon ?? CONFIG.beacon,
+            rules: {
+              heartbeatPeriodSec: v.heartbeatPeriod,
+              gracePeriodSec: v.gracePeriod,
+              challengePeriodSec: v.challengePeriod,
+              vetoProofGraceSec: v.vetoProofGrace,
+            },
             claimUrl: url,
-            rules: v ? { heartbeatPeriodSec: v.heartbeatPeriod, gracePeriodSec: v.gracePeriod, challengePeriodSec: v.challengePeriod } : null,
-            proofRecipe: rec?.mode === "evm"
-              ? "silence clock = Flare consensus time vs lastHeartbeatTs; after period+grace anyone may call startClaim(beneficiary), wait out the challenge, then executeRelease()"
-              : "silence proof = FDC ReferencedPaymentNonexistence over the beacon with the heartbeat reference, checkSourceAddresses=true, sourceAddressesRoot=keccak256(keccak256(owner)), chained from lastHeartbeatLedger+1; then startClaim(beneficiary) → challenge → executeRelease()",
-            generatedAt: new Date().toISOString(),
-          };
-          const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" });
-          const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = `heirloom-recovery-${address.slice(2, 10)}.json`;
-          a.click();
+          }));
         }}>⇩ Download recovery file</button>
         <span style={{ alignSelf: "center", fontSize: "0.85rem", color: "var(--mist)" }}>
           Give both to your beneficiary — and rehearse the claim once, together, today.
         </span>
       </div>
+      {incomplete && (
+        <div className="no-print notice err" style={{ marginBottom: 18 }}>
+          Recovery data incomplete — the keeper or the chain did not answer, so a download would contain blank
+          fields (and a printed sheet would too).{" "}
+          <button className="btn btn-ghost" style={{ padding: "2px 10px", fontSize: "0.78rem" }} onClick={load}>Retry</button>
+        </div>
+      )}
 
       <div style={{ border: "1px solid var(--line)", borderRadius: 14, padding: 34 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -78,7 +86,8 @@ export function Kit() {
             <p style={{ fontSize: "0.88rem" }}>
               Someone chose you as the beneficiary of their XRP continuity vault. Keep this sheet safe. It is
               <strong> not a key</strong> and cannot move funds by itself — funds move only after Flare's
-              network proves the owner's silence and a final challenge window passes.
+              network proves the owner's silence, a final challenge window passes, and a further
+              proof-settlement buffer elapses.
             </p>
           </div>
           {qr && (
@@ -102,6 +111,9 @@ export function Kit() {
               ["Heartbeat reference", rec?.reference ?? "—"],
               ["Inactivity window", v ? `${Math.round(v.heartbeatPeriod / 60)} min + ${Math.round(v.gracePeriod / 60)} min grace` : "…"],
               ["Final challenge", v ? `${Math.round(v.challengePeriod / 60)} min after a claim starts` : "…"],
+              ["Owner heartbeat cutoff", v ? "challenge end — a heartbeat with XRPL timestamp ≤ the cutoff still vetoes" : "…"],
+              ["Proof settlement buffer", v ? `${v.vetoProofGrace}s after the cutoff (a pre-cutoff heartbeat proof may still land)` : "…"],
+              ["Earliest release", v ? `challenge end + ${v.vetoProofGrace}s (releaseEligibleAt)` : "…"],
             ].map(([k, val]) => (
               <tr key={k} style={{ borderTop: "1px solid var(--line)" }}>
                 <td style={{ padding: "9px 8px 9px 0", color: "var(--mist)", whiteSpace: "nowrap", verticalAlign: "top" }}>{k}</td>
@@ -116,8 +128,9 @@ export function Kit() {
           <li>Open the claim page (scan the QR above) from any browser.</li>
           <li>Enter <strong>your own</strong> XRPL address — it must match the one the owner chose.</li>
           <li>Press "Start the claim". If the owner is still active, it will be refused — that is normal and protective.</li>
-          <li>Wait out the challenge window shown on screen.</li>
-          <li>Press "Execute the release". Native XRP arrives on your own wallet — no keys handed over, nothing to install.</li>
+          <li>Wait until the <strong>owner heartbeat cutoff</strong> shown on screen — the owner can still veto with one heartbeat until then.</li>
+          <li>Wait through the additional <strong>proof settlement buffer</strong> ({v ? `${v.vetoProofGrace}s` : "shown on screen"}) — a pre-cutoff heartbeat proof may still arrive and veto.</li>
+          <li>Press "Execute the release" only after the earliest-release time. Native XRP arrives on your own wallet — no keys handed over, nothing to install.</li>
         </ol>
 
         <h3 style={{ margin: "22px 0 10px" }}>Rehearse it now — while they're here</h3>
@@ -133,15 +146,20 @@ export function Kit() {
             <>Everything above is enough for any developer to finish the claim without us: for this plan the
             silence clock is Flare consensus time itself — once{" "}
             <span className="mono">lastHeartbeatTs + period + grace</span> has passed, anyone can call{" "}
-            <span className="mono">startClaim</span> with your address, wait out the challenge window, and call{" "}
-            <span className="mono">executeRelease</span>. The contract is verified on the explorer; the keeper
-            is open source at <span className="mono">github.com/a252937166/heirloom</span>.</>
+            <span className="mono">startClaim</span> with your address, wait out the challenge window{" "}
+            <strong>and the veto-proof grace</strong>, then call{" "}
+            <span className="mono">executeRelease</span> after <span className="mono">releaseEligibleAt</span>.
+            The contract is verified on the explorer; the keeper is open source at{" "}
+            <span className="mono">github.com/a252937166/heirloom</span>.</>
           ) : (
             <>Everything above is enough for any developer to finish the claim without us: the vault contract
             verifies (1) an FDC <span className="mono">ReferencedPaymentNonexistence</span> proof over the beacon
             with the heartbeat reference, source-filtered by the owner address, chained from the last heartbeat
-            ledger + 1, and (2) your address preimage. The contract is verified on the explorer; the keeper is
-            open source at <span className="mono">github.com/a252937166/heirloom</span>. Any party may submit the
+            ledger + 1, and (2) your address preimage. After <span className="mono">startClaim</span>, wait out
+            the challenge window <strong>and the veto-proof grace</strong>, then call{" "}
+            <span className="mono">executeRelease</span> after <span className="mono">releaseEligibleAt</span>.
+            The contract is verified on the explorer; the keeper is open source at{" "}
+            <span className="mono">github.com/a252937166/heirloom</span>. Any party may submit the
             proofs — the vault does not care who cranks it.</>
           )}
         </p>

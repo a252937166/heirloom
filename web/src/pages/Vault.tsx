@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import QRCode from "qrcode";
 import { PulseDial } from "../components/PulseDial";
+import { CopyBtn } from "../components/CopyBtn";
 import { CONFIG } from "../config";
 import { VaultView, addrHash, fmtFxrp, readVault, short } from "../lib/chain";
+import { Receipt, deriveSettlement } from "../lib/settlement";
 import { useWallet } from "../App";
 import { payWithMemo } from "../lib/gem";
 import { cancelEvmTx, friendlyEvmError, heartbeatEvmTx } from "../lib/evm";
@@ -52,6 +55,39 @@ export function EvidenceTimeline({ events, journey = true }: { events: KeeperEve
   );
 }
 
+// Manual heartbeat instructions for XRPL owners without GemWallet: the final
+// veto must never depend on one browser extension. The QR encodes only the
+// destination — the memo (and the FROM address) still decide everything.
+function ManualHeartbeatPanel({ memoHex, ownerXrpl }: { memoHex: string; ownerXrpl: string | null }) {
+  const [qr, setQr] = useState("");
+  useEffect(() => {
+    QRCode.toDataURL(CONFIG.beacon, { width: 120, margin: 1, color: { dark: "#0E1526", light: "#FFFFFF" } })
+      .then(setQr).catch(() => {});
+  }, []);
+  return (
+    <details style={{ marginTop: 12, textAlign: "left" }}>
+      <summary style={{ cursor: "pointer", color: "var(--mist-2)", fontSize: "0.8rem" }}>Use another XRPL wallet</summary>
+      <div className="kv" style={{ margin: "10px 0" }}>
+        <div className="kv-row"><span className="k">To (beacon)</span>
+          <span className="v mono" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>{CONFIG.beacon} <CopyBtn text={CONFIG.beacon} /></span></div>
+        <div className="kv-row"><span className="k">Amount</span><span className="v">1 drop (0.000001 XRP)</span></div>
+        <div className="kv-row"><span className="k">MemoData (hex)</span>
+          <span className="v mono" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", wordBreak: "break-all" }}>{memoHex} <CopyBtn text={memoHex} /></span></div>
+      </div>
+      <div className="notice err" style={{ fontSize: "0.78rem" }}>
+        Must be sent <strong>from the owner address</strong>{ownerXrpl ? <> <span className="mono">{ownerXrpl}</span></> : " printed on your Recovery Kit"} —
+        silence and veto proofs are source-filtered; a payment from any other address does not count.
+      </div>
+      {qr && (
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}>
+          <img src={qr} alt="Beacon address QR" style={{ borderRadius: 8, border: "3px solid #fff", width: 84, height: 84 }} />
+          <span className="mono" style={{ fontSize: "0.64rem", color: "var(--mist-2)" }}>destination only — add the memo manually in your wallet</span>
+        </div>
+      )}
+    </details>
+  );
+}
+
 const HEADLINES: Record<number, { title: string; sub: string }> = {
   1: { title: "Finish activating your plan", sub: "One XRPL payment away from a living plan." },
   2: { title: "Your continuity plan is active", sub: "Send a heartbeat within the window and nothing can move." },
@@ -72,12 +108,19 @@ export function Vault() {
   const [busy, setBusy] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelIntent, setCancelIntent] = useState<{ beacon: string; memoHex: string } | null>(null);
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [recovery, setRecovery] = useState<{ ownerXrpl: string | null } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       setV(await readVault(address));
       const r = await fetch(`${CONFIG.api}/vaults/${address}`);
-      if (r.ok) setEvents((await r.json()).events ?? []);
+      if (r.ok) {
+        const j = await r.json();
+        setEvents(j.events ?? []);
+        setReceipt(j.receipt ?? null);
+        setRecovery(j.recovery ?? null);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -168,7 +211,24 @@ export function Vault() {
   const head = HEADLINES[v.state] ?? { title: "Continuity plan", sub: "" };
   const tone = v.state === 2 ? (dueSoon ? "warn" : "alive") : v.state === 3 || v.state === 4 || v.state === 7 ? "warn" : "gold";
   const isEvmPlan = v.ownerEvm !== ZERO_EVM;
-  const headSub = v.state === 6 && isEvmPlan ? "The vault handed all FXRP back to your connected wallet." : head.sub;
+  // cross-chain honesty: Released/Cancelled means the redemption was REQUESTED —
+  // "delivered"/"returned" is claimed only once a settlement matches the reference
+  const sett = deriveSettlement(receipt, events);
+  let title = dueSoon ? "Your check-in is due" : head.title;
+  let headSub = head.sub;
+  if (v.state === 5 && !sett.payoutConfirmed) {
+    title = "Redemption requested — XRP on its way";
+    headSub = "FAssets gives the agent a bounded payment window to deliver native XRP; the payout is tracked by its payment reference and this page updates as it lands.";
+  } else if (v.state === 6 && isEvmPlan) {
+    headSub = "The vault handed all FXRP back to your connected wallet.";
+  } else if (v.state === 6 && !isEvmPlan) {
+    if (sett.payoutConfirmed) {
+      headSub = "The cancel redemption settled — XRP returned to your XRPL wallet.";
+    } else {
+      title = "Returning XRP to owner";
+      headSub = "The cancel redemption is settling through FAssets — check your XRPL wallet for the payment; this page updates as settlements are matched.";
+    }
+  }
 
   return (
     <main className="wrap side-layout" style={{ paddingTop: 34, paddingBottom: 40 }}>
@@ -186,7 +246,7 @@ export function Vault() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10 }}>
         <div>
           <div className="eyebrow">Continuity plan</div>
-          <h1 style={{ fontSize: "2rem", margin: "8px 0 4px" }}>{dueSoon ? "Your check-in is due" : head.title}</h1>
+          <h1 style={{ fontSize: "2rem", margin: "8px 0 4px" }}>{title}</h1>
           <p style={{ fontSize: "0.92rem" }}>{headSub}</p>
         </div>
         <span className={`pill ${tone}`}>● {["", "Awaiting funding", dueSoon ? "Check-in due" : "Healthy", "Claim pending", "Releasing", "Released", "Cancelled", "Cancelling"][v.state]}</span>
@@ -237,6 +297,7 @@ export function Vault() {
           <p className="mono" style={{ fontSize: "0.66rem", color: "var(--mist-2)", marginTop: 8, textAlign: "center" }}>
             {isEvmPlan ? "one click — the transaction timestamp cancels and resets" : "send one payment to cancel and reset"}
           </p>
+          {!isEvmPlan && <ManualHeartbeatPanel memoHex={v.heartbeatReference.slice(2).toUpperCase()} ownerXrpl={recovery?.ownerXrpl ?? null} />}
         </div>
       )}
 
@@ -258,6 +319,11 @@ export function Vault() {
                 <p className="hint" style={{ fontSize: "0.75rem", color: "var(--mist-2)", maxWidth: 260 }}>
                   Connect GemWallet, or send 1 drop to the beacon with your reference memo from any wallet.
                 </p>
+              )}
+              {!isEvmPlan && (
+                <div style={{ maxWidth: 280, width: "100%" }}>
+                  <ManualHeartbeatPanel memoHex={v.heartbeatReference.slice(2).toUpperCase()} ownerXrpl={recovery?.ownerXrpl ?? null} />
+                </div>
               )}
             </div>
           )}

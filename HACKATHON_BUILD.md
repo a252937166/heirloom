@@ -18,8 +18,8 @@ Chronology (see `git log` for the full record):
    manifest (`spike/build-case.mjs`), guided 90-second tour, EIP-6963 wallet connections, Recovery Kit.
 5. **Three full real-infrastructure lifecycles** (no mocks), one per contract era; the canonical v4 run
    ends fully reconciled: funding → heartbeat → staticCall early-claim drill (blocked, SilenceNotProven) →
-   silence proof → challenge + 180s veto-proof grace → FULL-balance FAssets redemption → 10.03 XRP on the
+   silence proof → challenge + 180s veto-proof grace → FULL-balance FAssets redemption → 10.025312 XRP on the
    beneficiary's wallet → final balance 0.
 
-Frozen submission state: tag `submission-v3` — the tag's commit is the single source of truth and is shown verbatim in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
-`node spike/build-case.mjs`.
+Frozen submission state: tag `submission-v4` — the tag's commit is the single source of truth and is shown verbatim in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
+`node spike/build-case.mjs` (defaults to the canonical v4 vault `0x35975770e1eD5431e0bFCaBB238B6188c94AeAdA`), then validate with `node spike/validate-case.mjs`.

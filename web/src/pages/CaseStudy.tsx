@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { CONFIG } from "../config";
 import { PulseDial } from "../components/PulseDial";
+import { CopyBtn } from "../components/CopyBtn";
 import { VaultView, readVault, fmtFxrp } from "../lib/chain";
 import { EvidenceTimeline, KeeperEvent } from "./Vault";
 import { NodeStepper } from "../components/NodeStepper";
@@ -27,6 +28,14 @@ interface Chapter {
 }
 
 const m = manifest;
+// challenge block: tolerant of both the pre-v4 manifest ({startedAt, endedAt})
+// and the chain-timestamped v4 schema — the page renders whichever it has
+type ChallengeInfo = Partial<{
+  startedAt: number; endedAt: number; heartbeatCutoffAt: number;
+  vetoProofGraceSec: number; releaseEligibleAt: number; releaseExecutedAt: number;
+}>;
+const chal = (m.challenge ?? undefined) as ChallengeInfo | undefined;
+const cutoffAt = chal?.heartbeatCutoffAt ?? chal?.endedAt;
 const CHAPTER_ICON: Record<string, string> = {
   promise: "✍", funded: "⇄", heartbeat: "♥", "early-claim": "✕", silence: "◎", challenge: "⏳", payout: "✓",
 };
@@ -100,14 +109,16 @@ const CHAPTERS: Chapter[] = [
   },
   {
     id: "challenge", n: "6", title: "Alex received a final veto",
-    actor: "A final challenge window opened. One valid owner heartbeat could still cancel the release.",
-    tech: "The contract entered ClaimPending; release stayed impossible until the challenge deadline passed.",
-    result: "Silence alone did not cause an immediate, irreversible payout.",
+    actor: "A final challenge window opened, followed by a proof-settlement grace. One valid owner heartbeat — sent before the cutoff — could still cancel the release, even if its proof landed during the grace.",
+    tech: "The contract entered ClaimPending; release stayed impossible until the heartbeat cutoff passed AND a further veto-proof grace elapsed. The heartbeat's XRPL timestamp decides — never transaction ordering.",
+    result: "Silence alone did not cause an immediate, irreversible payout — and a slow proof could not lose the owner's race.",
     evidence: [
       { chain: "Flare", label: "startClaim — challenge window opened", hash: m.claimStartTxFlare, url: flareTx(m.claimStartTxFlare) },
-      ...(m.challenge ? [{ chain: "Rule" as const, label: `Window: ${new Date(m.challenge.startedAt * 1000).toLocaleTimeString()} → ${new Date(m.challenge.endedAt * 1000).toLocaleTimeString()}`, extra: "enforced by claimChallengeEndsAt" }] : []),
+      ...(chal?.startedAt && cutoffAt ? [{ chain: "Rule" as const, label: `Heartbeat cutoff: ${new Date(chal.startedAt * 1000).toLocaleTimeString()} → ${new Date(cutoffAt * 1000).toLocaleTimeString()}`, extra: "claimChallengeEndsAt — the owner's XRPL-timestamp deadline" }] : []),
+      ...(chal?.releaseEligibleAt ? [{ chain: "Rule" as const, label: `+${chal.vetoProofGraceSec ?? 180}s veto-proof grace → release eligible ${new Date(chal.releaseEligibleAt * 1000).toLocaleTimeString()}`, extra: "releaseEligibleAt = cutoff + grace" }] : []),
+      ...(chal?.releaseExecutedAt ? [{ chain: "Rule" as const, label: `Release executed ${new Date(chal.releaseExecutedAt * 1000).toLocaleTimeString()}`, extra: "chain block timestamp — verified ≥ releaseEligibleAt by the integrity checks" }] : []),
     ],
-    raw: "state = ClaimPending; claimChallengeEndsAt = now + challengePeriod; recordHeartbeat during this window → ClaimVetoed, state back to Active; executeRelease before the deadline reverts ChallengeNotOver.",
+    raw: "state = ClaimPending; heartbeat cutoff = claimChallengeEndsAt; releaseEligibleAt = cutoff + vetoProofGrace; executeRelease before releaseEligibleAt reverts ChallengeNotOver; a heartbeat proof with XRPL timestamp ≤ the cutoff still vetoes during the grace (ClaimVetoed); a post-cutoff-timestamp proof reverts VetoWindowClosed.",
     dial: { state: 3, frac: 0.5, label: "challenge — one heartbeat vetoes" },
     ember: true,
   },
@@ -153,16 +164,6 @@ const RAIL_NOTES: Record<string, string> = {
   claim: "The beneficiary's claim opened the challenge window. Still nothing moved.",
   created: "The vault clone was deployed with the promise burned into its config.",
 };
-
-function CopyBtn({ text }: { text: string }) {
-  const [ok, setOk] = useState(false);
-  return (
-    <button className="mono" onClick={() => { navigator.clipboard?.writeText(text).then(() => { setOk(true); setTimeout(() => setOk(false), 1200); }); }}
-      style={{ background: "none", border: "1px solid var(--line)", borderRadius: 6, color: ok ? "var(--verdant)" : "var(--mist-2)", fontSize: "0.62rem", padding: "2px 7px", cursor: "pointer" }}>
-      {ok ? "copied" : "copy"}
-    </button>
-  );
-}
 
 export function CaseStudy() {
   const [params, setParams] = useSearchParams();
@@ -479,7 +480,9 @@ export function CaseStudy() {
                   ["Settlement transaction", m.settlement?.hash ?? "—"],
                   ["Release transaction", m.releaseTxFlare ?? "—"],
                   ["Silence proof round", String(m.silenceRound ?? "—")],
-                  ["Challenge completed", m.challenge ? new Date(m.challenge.endedAt * 1000).toLocaleString() : "—"],
+                  ["Heartbeat cutoff", cutoffAt ? new Date(cutoffAt * 1000).toLocaleString() : "—"],
+                  [`Release eligible (cutoff + ${chal?.vetoProofGraceSec ?? 180}s grace)`, chal?.releaseEligibleAt ? new Date(chal.releaseEligibleAt * 1000).toLocaleString() : "—"],
+                  ["Release executed (chain block time)", chal?.releaseExecutedAt ? new Date(chal.releaseExecutedAt * 1000).toLocaleString() : "—"],
                   ["Final FXRP balance", `${m.finalFxrpBalance} FXRP${residual ? " (below the protocol redemption minimum — disclosed, not hidden)" : ""}`],
                   ["Final vault state", m.finalState === 5 ? "Released" : String(m.finalState)],
                 ] as [string, string][]).map(([k, val]) => (

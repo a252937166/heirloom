@@ -58,7 +58,7 @@ generated from chain + XRPL data by `spike/build-case.mjs`:
 | Silence proven | source-filtered `ReferencedPaymentNonexistence`, chained from the heartbeat ledger + 1 |
 | Challenge + veto-proof grace | release waited out the challenge **and** the 180s proof buffer — the XRPL timestamp decides a veto, never transaction ordering |
 | **Full-balance redemption** | request `#39635850` for the entire 10.07569 FXRP, decoded from the release receipt |
-| **Real XRP delivered** | beneficiary's own wallet received **10.03 XRP** — settlement memo equals the redemption `paymentReference`, byte for byte |
+| **Real XRP delivered** | beneficiary's own wallet received **10.025312 XRP** (exact to the drop: redeemed 10.07569 − 0.050378 agent fee) — settlement memo equals the redemption `paymentReference`, byte for byte |
 | **Reconciled to zero** | final vault balance **0 FXRP** — `SETTLED · FULLY RECONCILED`, five integrity checks pass |
 
 Earlier full runs (v1 lot-redemption era; v2 residual case) are kept in the README as provenance — each gap

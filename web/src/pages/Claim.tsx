@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { CONFIG } from "../config";
 import { VaultView, addrHash, fmtFxrp, readVault, short } from "../lib/chain";
+import { Receipt, deriveSettlement } from "../lib/settlement";
 import { EvidenceTimeline, KeeperEvent } from "./Vault";
 import { PulseDial } from "../components/PulseDial";
+import { CopyBtn } from "../components/CopyBtn";
 import { NodeStepper } from "../components/NodeStepper";
 
 const STEPS = ["Confirm beneficiary address", "Prove the silence", "Final challenge", "Redemption", "XRP received"];
@@ -14,10 +16,6 @@ interface DrillResult {
   reason: string;
   detail?: string;
   fundsMoved: string;
-}
-interface Receipt {
-  redemptions: { requestId: string; paymentReference: string; valueUBA: string; feeUBA: string }[];
-  settlements: { requestId: string; deliveredDrops: string; txXrpl: string; paymentReference: string }[];
 }
 
 const STEP_SHORT = ["Verify", "Proof", "Challenge", "Release", "Complete"];
@@ -71,6 +69,9 @@ export function Claim() {
   const settled = useMemo(() => events.filter((e) => e.kind === "settled"), [events]);
   const residual = useMemo(() => events.find((e) => e.kind === "residual"), [events]);
   const released = useMemo(() => events.find((e) => e.kind === "released"), [events]);
+  // Released means the redemption was REQUESTED; "delivered" is claimed only
+  // once a settlement matching the payment reference exists
+  const sett = deriveSettlement(receipt, events);
 
   const step = !v ? 0 : v.state === 5 ? 5 : v.state === 4 ? 3 : v.state === 3 ? 2 : v.state >= 6 ? 0 : beneMatches ? 1 : 0;
 
@@ -100,6 +101,23 @@ export function Claim() {
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); await refresh(); }
   }
 
+  // permissionless redemption-default: if the agent misses its underlying
+  // window, a non-payment proof secures protocol collateral to the vault
+  async function requestDefault() {
+    setBusy(true); setErr(null); setNote(null);
+    try {
+      const r = await fetch(`${CONFIG.api}/vaults/${address}/redemption-default`, { method: "POST" });
+      const text = await r.text();
+      if (!r.ok) throw new Error(text);
+      let j: { eligible?: boolean; reason?: string } | null = null;
+      try { j = JSON.parse(text); } catch { /* plain ack */ }
+      setNote(j?.eligible === false
+        ? `Not yet available: ${j.reason ?? "the agent's payment window is still open"}.`
+        : "Default check started — the outcome (defaulted, or 'agent window still open') appears in the journey below.");
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); await refresh(); }
+  }
+
   // the drill runs a staticCall server-side and reports CHAIN truth —
   // "blocked as designed" is only ever shown when the contract actually refused
   async function testEarlyClaim() {
@@ -123,7 +141,7 @@ export function Claim() {
     <main className="wrap" style={{ padding: "44px 24px", maxWidth: 880 }}>
       <div className="eyebrow">Beneficiary access</div>
       <h1 style={{ fontSize: "1.9rem", margin: "8px 0 4px" }}>
-        {v.state === 5 ? "The XRP reached its person" : v.state >= 6 ? "This plan was cancelled by its owner" : v.state === 4 ? "Redemption in progress" : v.state === 3 ? "Final challenge running" : "Claim, when the time truly comes"}
+        {v.state === 5 ? (sett.payoutConfirmed ? "The XRP reached its person" : "Redemption requested — XRP on its way") : v.state >= 6 ? "This plan was cancelled by its owner" : v.state === 4 ? "Redemption in progress" : v.state === 3 ? "Final challenge running" : "Claim, when the time truly comes"}
       </h1>
       <p style={{ fontSize: "0.92rem", maxWidth: 620 }}>
         Nothing on this page can rush the plan: funds move only after Flare's network proves the owner's
@@ -255,6 +273,36 @@ export function Claim() {
               )}
             </div>
           ) : null}
+          {v.state === 5 && !sett.payoutConfirmed && (
+            <div className="card" style={{ marginBottom: 18 }}>
+              <h3 style={{ marginBottom: 8 }}>Redemption requested — awaiting the XRP payment</h3>
+              <p style={{ fontSize: "0.88rem", marginBottom: 10 }}>
+                The FAssets agent has a bounded underlying-payment window to deliver native XRP. Delivery is
+                matched by the redemption's payment reference — this page updates the moment it lands.
+              </p>
+              {sett.awaiting.length > 0 && (
+                <>
+                  <div className="kv" style={{ marginBottom: 12 }}>
+                    {sett.awaiting.map((ref) => (
+                      <div className="kv-row" key={ref}>
+                        <span className="k">Awaiting reference</span>
+                        <span className="v mono" style={{ display: "flex", gap: 8, alignItems: "center" }}>{short(ref, 14)} <CopyBtn text={ref} /></span>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="btn btn-warn" disabled={busy} onClick={requestDefault}>
+                    {busy ? "Checking the agent window…" : "Recover collateral (agent missed the window)"}
+                  </button>
+                  <p className="hint" style={{ fontSize: "0.72rem", color: "var(--mist-2)", marginTop: 8 }}>
+                    If the agent misses its underlying deadline, the FAssets default path secures collateral
+                    compensation to the vault (Flare-side assets; distribution to the XRPL beneficiary is
+                    roadmap — the same disclosure as the docs). One click, permissionless — nothing fires
+                    automatically.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
           {v.state >= 6 && (
             <div className="card">
               <h3 style={{ marginBottom: 8 }}>{v.state === 7 ? "Cancelling — value returning to the owner" : "Plan cancelled by its owner"}</h3>
@@ -265,7 +313,7 @@ export function Claim() {
               </p>
             </div>
           )}
-          {v.state === 5 && (
+          {v.state === 5 && sett.payoutConfirmed && (
             <div className="card" style={{ borderColor: "color-mix(in srgb, var(--verdant) 45%, transparent)" }}>
               <h3 style={{ marginBottom: 12 }}>Payout receipt</h3>
               <div className="status-grid">
