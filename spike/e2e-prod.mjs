@@ -62,16 +62,12 @@ log("waiting for the heartbeat to be proven (chain epoch is the truth)…");
 }
 log("heartbeat proven on-chain (epoch ≥ 1)");
 
-// 3. early claim must fail
-try {
-  await api(`/vaults/${S.vault}/claim`, { body: { beneficiaryXrpl: S.beneficiary } });
-  // the keeper accepts the job; the on-chain claim will fail — watch for the error event
-  await sleep(20_000);
-} catch (e) {
-  log(`early claim rejected at API level: ${String(e.message).slice(0, 120)}`);
+// 3. early claim must fail — chain truth via staticCall, recorded as a drill
+{
+  const drill = await api(`/vaults/${S.vault}/simulate-early-claim`, { body: { beneficiaryXrpl: S.beneficiary } });
+  log(`early-claim drill: blocked=${drill.blocked} reason=${drill.reason}`);
+  if (!drill.blocked) throw new Error("early claim was NOT blocked — investigate before continuing");
 }
-const early = (await events()).filter((e) => e.kind === "error");
-log(`early-claim outcome: ${early.length ? early.at(-1).label : "(job queued; silence attestation will refuse while owner is alive)"}`);
 
 // 4. wait out the inactivity window, then claim for real
 log("waiting out the inactivity window (~5.5 min)…");
@@ -85,8 +81,21 @@ for (let i = 0; i < 80; i++) {
 }
 log("claim opened (challenge running)");
 
-// 5. release after challenge
-await sleep(130_000);
+// 5. release after challenge + veto proof grace (v4: the XRPL timestamp decides
+// a veto, so releases wait out the proof-settlement buffer)
+{
+  const { Contract } = await import("ethers");
+  const { provider, VAULT_ABI } = await import("./fdc-lib.mjs");
+  const v = new Contract(S.vault, VAULT_ABI, provider);
+  for (let i = 0; ; i++) {
+    const elig = Number(await v.releaseEligibleAt().catch(() => 0));
+    const nowTs = Math.floor(Date.now() / 1000);
+    if (elig > 0 && nowTs >= elig + 3) break;
+    if (i === 0 && elig > 0) log(`waiting for release eligibility at ${new Date(elig * 1000).toISOString()} (challenge + proof grace)…`);
+    if (i >= 90) throw new Error("release eligibility timeout");
+    await sleep(10_000);
+  }
+}
 await api(`/vaults/${S.vault}/release`, { body: {} });
 for (let i = 0; i < 90; i++) {
   const ks = await lastKind();
