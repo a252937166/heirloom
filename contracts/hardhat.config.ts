@@ -29,6 +29,21 @@ const config: HardhatUserConfig = {
       accounts,
     },
   },
+  // Blockscout verification (judges can read the exact deployed source)
+  etherscan: {
+    apiKey: { coston2: "blockscout" },
+    customChains: [
+      {
+        network: "coston2",
+        chainId: 114,
+        urls: {
+          apiURL: "https://coston2-explorer.flare.network/api",
+          browserURL: "https://coston2-explorer.flare.network",
+        },
+      },
+    ],
+  },
+  sourcify: { enabled: false },
   mocha: { timeout: 120000 },
 };
 
