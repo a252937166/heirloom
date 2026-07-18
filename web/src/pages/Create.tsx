@@ -20,7 +20,7 @@ const mins = (s: number) => (s % 60 === 0 ? `${s / 60} minute${s === 60 ? "" : "
 
 export function Create() {
   const nav = useNavigate();
-  const { wallet, evm, connect, openConnect, connecting } = useWallet();
+  const { wallet, evm, connect, openConnect, refreshPlans, connecting } = useWallet();
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -48,7 +48,11 @@ export function Create() {
     const t = setInterval(async () => {
       try {
         const r = await fetch(`${CONFIG.api}/vaults/${created.vault}`);
-        if (r.ok) setProgress((await r.json()).events ?? []);
+        if (r.ok) {
+          const evs: KeeperEvent[] = (await r.json()).events ?? [];
+          setProgress(evs);
+          if (evs.some((ev) => ev.kind === "active")) refreshPlans(); // plan count updates the moment it goes live
+        }
       } catch {}
     }, 8000);
     return () => clearInterval(t);
@@ -63,6 +67,7 @@ export function Create() {
       });
       if (!r.ok) throw new Error(await r.text());
       setCreated(await r.json());
+      refreshPlans();
       setStep(4);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -301,15 +306,31 @@ export function Create() {
                 </p>
               )}
               <div style={{ display: "grid", gap: 8 }}>
-                {progressSteps.map(([kind, label]) => (
-                  <div key={kind} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: "0.88rem" }}>
-                    <span className="mono" style={{ color: doneKinds.has(kind) ? "var(--verdant)" : "var(--mist-2)" }}>
-                      {doneKinds.has(kind) ? "✓" : "○"}
-                    </span>
-                    <span style={{ color: doneKinds.has(kind) ? "var(--paper)" : "var(--mist-2)" }}>{label}</span>
-                  </div>
-                ))}
+                {progressSteps.map(([kind, label], i) => {
+                  const done = doneKinds.has(kind);
+                  const activeStep = !done && progressSteps.slice(0, i).every(([k]) => doneKinds.has(k));
+                  return (
+                    <div key={kind} style={{ display: "flex", gap: 10, alignItems: "center", fontSize: "0.88rem" }}>
+                      {done ? (
+                        <span className="mono" style={{ color: "var(--verdant)" }}>✓</span>
+                      ) : activeStep ? (
+                        <span className="spinner" />
+                      ) : (
+                        <span className="mono" style={{ color: "var(--mist-2)" }}>○</span>
+                      )}
+                      <span style={{ color: done ? "var(--paper)" : activeStep ? "var(--paper)" : "var(--mist-2)" }}>
+                        {label}{activeStep ? "…" : ""}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
+              {!isActive && (
+                <p className="mono pulse" style={{ fontSize: "0.68rem", color: "var(--mist-2)", marginTop: 10 }}>
+                  Flare's data providers are attesting — a voting round takes about 90 seconds, finalization
+                  2–3 minutes. This page updates itself.
+                </p>
+              )}
               {isActive && (
                 <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setStep(5)}>
                   The plan is live — one last thing

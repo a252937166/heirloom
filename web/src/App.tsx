@@ -1,5 +1,5 @@
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Landing } from "./pages/Landing";
 import { Create } from "./pages/Create";
 import { Vault } from "./pages/Vault";
@@ -9,15 +9,19 @@ import { CaseStudy } from "./pages/CaseStudy";
 import { WalletModal } from "./components/WalletModal";
 import { FlareMark } from "./components/FlareMark";
 import { WalletState, connectWallet, fundTestXrp, xrpBalance } from "./lib/gem";
-import { EVM_NONE, EvmState, WalletOption, connectWith, disconnectEvm, retrySwitch } from "./lib/evm";
+import { EVM_NONE, EvmState, WalletOption, connectWith, disconnectEvm, retrySwitch, silentReconnect } from "./lib/evm";
 import { CONFIG } from "./config";
-import { c2Balance, short, vaultsOfOwner } from "./lib/chain";
+import { c2Balance, fmtFxrp, readVault, short, vaultsOfOwner } from "./lib/chain";
+
+const PLAN_STATES = ["—", "Funding", "Active", "Claim pending", "Releasing", "Released", "Cancelled"];
+const PLAN_TONES = ["var(--mist-2)", "var(--lamplight)", "var(--verdant)", "var(--ember)", "var(--ember)", "var(--mist)", "var(--mist-2)"];
 
 const WalletCtx = createContext<{
   wallet: WalletState;
   evm: EvmState;
   connect: () => Promise<WalletState>;
   openConnect: () => void;
+  refreshPlans: () => void;
   connecting: boolean;
   notice: string | null;
 }>({
@@ -25,6 +29,7 @@ const WalletCtx = createContext<{
   evm: EVM_NONE,
   connect: async () => ({ installed: false, address: null, network: null }),
   openConnect: () => {},
+  refreshPlans: () => {},
   connecting: false,
   notice: null,
 });
@@ -49,13 +54,13 @@ export default function App() {
   useEffect(() => {
     if (!acctOpen) return;
     setAcctBal(null);
-    if (evm.address) c2Balance(evm.address).then(setAcctBal).catch(() => setAcctBal(null));
-    else if (wallet.address) xrpBalance(wallet.address).then(setAcctBal).catch(() => setAcctBal(null));
+    if (evm.address) c2Balance(evm.address).then(setAcctBal).catch(() => setAcctBal("—"));
+    else if (wallet.address) xrpBalance(wallet.address).then((b) => setAcctBal(b ?? "—")).catch(() => setAcctBal("—"));
   }, [acctOpen, evm.address, wallet.address]);
 
-  useEffect(() => {
+  const refreshPlans = useCallback(() => {
     if (wallet.address) {
-      vaultsOfOwner(wallet.address).then(setMyPlans).catch(() => {});
+      vaultsOfOwner(wallet.address).then((v) => setMyPlans([...v])).catch(() => {});
     } else if (evm.address) {
       fetch(`${CONFIG.api}/plans/of/${evm.address}`)
         .then((r) => (r.ok ? r.json() : { vaults: [] }))
@@ -63,6 +68,39 @@ export default function App() {
         .catch(() => {});
     }
   }, [wallet.address, evm.address]);
+  useEffect(() => { refreshPlans(); }, [refreshPlans]);
+
+  // survive page refreshes: remember the last wallet and restore it silently
+  // (eth_accounts / an already-authorized GemWallet never pop a prompt)
+  useEffect(() => {
+    const saved = localStorage.getItem("hl.wallet");
+    if (!saved) return;
+    if (saved === "xrpl") {
+      connectWallet().then((w) => {
+        if (w.address) setWallet(w);
+        else localStorage.removeItem("hl.wallet");
+      }).catch(() => {});
+    } else if (saved.startsWith("evm:")) {
+      silentReconnect(saved.slice(4)).then((st) => {
+        if (st) setEvm(st);
+        else localStorage.removeItem("hl.wallet");
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // the plans menu shows live state + balance for each vault
+  const [planInfo, setPlanInfo] = useState<Record<string, { state: number; bal: string }>>({});
+  useEffect(() => {
+    if (!plansOpen) return;
+    refreshPlans();
+    myPlans.slice(0, 8).forEach((p) => {
+      readVault(p)
+        .then((v) => setPlanInfo((m) => ({ ...m, [p]: { state: v.state, bal: fmtFxrp(v.fxrpBalance) } })))
+        .catch(() => {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plansOpen, myPlans.join(",")]);
 
   // XRPL-native (GemWallet) is the hero path — 1-drop heartbeats proven by FDC.
   const connect = async (): Promise<WalletState> => {
@@ -91,8 +129,10 @@ export default function App() {
     try {
       const st = await connectWith(opt);
       setEvm(st);
-      if (st.address) setModalOpen(false);
-      else setNotice("evm-rejected");
+      if (st.address) {
+        localStorage.setItem("hl.wallet", `evm:${opt.rdns}`);
+        setModalOpen(false);
+      } else setNotice("evm-rejected");
     } catch (e) {
       setNotice(/rejected|denied|4001/i.test(String((e as Error).message)) ? "evm-rejected" : "no-evm");
     } finally {
@@ -102,7 +142,10 @@ export default function App() {
 
   const pickXrpl = async () => {
     const w = await connect();
-    if (w.address) setModalOpen(false);
+    if (w.address) {
+      localStorage.setItem("hl.wallet", "xrpl");
+      setModalOpen(false);
+    }
   };
 
   const retryNetwork = async () => {
@@ -131,6 +174,7 @@ export default function App() {
   };
 
   const disconnect = () => {
+    localStorage.removeItem("hl.wallet");
     setWallet((w) => ({ installed: w.installed, address: null, network: null }));
     setEvm(EVM_NONE);
     setMyPlans([]);
@@ -139,7 +183,7 @@ export default function App() {
   };
 
   return (
-    <WalletCtx.Provider value={{ wallet, evm, connect, openConnect: () => setModalOpen(true), connecting, notice }}>
+    <WalletCtx.Provider value={{ wallet, evm, connect, openConnect: () => setModalOpen(true), refreshPlans, connecting, notice }}>
       <header style={{ borderBottom: "1px solid var(--line)", position: "sticky", top: 0, background: "color-mix(in srgb, var(--ink) 88%, transparent)", backdropFilter: "blur(8px)", zIndex: 10 }} className="no-print">
         <div className="wrap" style={{ display: "flex", alignItems: "center", gap: 26, height: 62 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
@@ -164,7 +208,7 @@ export default function App() {
                     display: "inline-flex", alignItems: "center", gap: 7, fontSize: "0.76rem", letterSpacing: "0.05em",
                     color: active ? "var(--lamplight)" : "var(--mist)", textDecoration: "none",
                     borderBottom: active ? "2px solid var(--lamplight)" : "2px solid transparent",
-                    marginBottom: -1, padding: "0 2px",
+                    marginBottom: -1, padding: "0 2px", whiteSpace: "nowrap", flexShrink: 0,
                   }}>
                   <span style={{ fontSize: "0.7rem", opacity: 0.9 }}>{n.icon}</span>{n.label}
                 </Link>
@@ -176,31 +220,58 @@ export default function App() {
                   style={{
                     display: "inline-flex", alignItems: "center", gap: 7, fontSize: "0.76rem", letterSpacing: "0.05em",
                     color: plansOpen ? "var(--lamplight)" : "var(--mist)", background: "none", border: "none", cursor: "pointer",
-                    borderBottom: plansOpen ? "2px solid var(--lamplight)" : "2px solid transparent", marginBottom: -1, padding: "0 2px",
+                    borderBottom: plansOpen ? "2px solid var(--lamplight)" : "2px solid transparent", marginBottom: -1,
+                    padding: "0 2px", whiteSpace: "nowrap", flexShrink: 0,
                   }}>
-                  <span style={{ fontSize: "0.7rem", opacity: 0.9 }}>▦</span>My plans{myPlans.length ? ` (${myPlans.length})` : ""}
+                  <span style={{ fontSize: "0.7rem", opacity: 0.9 }}>▦</span>My plans
+                  {myPlans.length > 0 && (
+                    <span className="pill" style={{ fontSize: "0.58rem", padding: "1px 7px", color: "var(--lamplight)", borderColor: "color-mix(in srgb, var(--lamplight) 45%, transparent)" }}>
+                      {myPlans.length}
+                    </span>
+                  )}
                 </button>
                 {plansOpen && (
-                  <div style={{ position: "absolute", right: 0, top: 54, background: "var(--ink-2)", border: "1px solid var(--line)", borderRadius: 12, padding: 10, minWidth: 240, zIndex: 30 }}>
-                    {myPlans.length === 0 && <p style={{ fontSize: "0.8rem", padding: 6 }}>No plans yet — create your first.</p>}
-                    {myPlans.map((p) => (
-                      <Link key={p} to={`/vault/${p}`} onClick={() => setPlansOpen(false)}
-                        style={{ display: "block", padding: "8px 10px", borderRadius: 8, fontSize: "0.8rem" }} className="mono">
-                        {short(p, 10)}
-                      </Link>
-                    ))}
+                  <div style={{ position: "absolute", right: 0, top: 54, background: "var(--ink-2)", border: "1px solid var(--line)", borderRadius: 14, padding: 12, width: 300, zIndex: 30, boxShadow: "0 18px 60px rgba(0,0,0,.45)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "2px 6px 10px", borderBottom: "1px solid var(--line)", marginBottom: 8 }}>
+                      <span style={{ fontSize: "0.85rem", color: "var(--paper)", fontWeight: 500 }}>My plans</span>
+                      <span className="mono" style={{ fontSize: "0.62rem", color: "var(--mist-2)" }}>live from the chain</span>
+                    </div>
+                    {myPlans.length === 0 && (
+                      <p style={{ fontSize: "0.8rem", padding: "4px 6px 8px", color: "var(--mist)" }}>No plans yet — create your first.</p>
+                    )}
+                    {myPlans.map((p) => {
+                      const info = planInfo[p.toLowerCase()] ?? planInfo[p];
+                      return (
+                        <Link key={p} to={`/vault/${p}`} onClick={() => setPlansOpen(false)} className="menu-row"
+                          style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", borderRadius: 9, textDecoration: "none" }}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: info ? PLAN_TONES[info.state] : "var(--line)", flexShrink: 0 }} />
+                          <span style={{ minWidth: 0, flex: 1 }}>
+                            <span className="mono" style={{ display: "block", fontSize: "0.78rem", color: "var(--paper)" }}>{short(p, 8)}</span>
+                            <span className="mono" style={{ display: "block", fontSize: "0.62rem", color: info ? PLAN_TONES[info.state] : "var(--mist-2)", marginTop: 2 }}>
+                              {info ? `${PLAN_STATES[info.state]} · ${info.bal} FXRP` : "reading state…"}
+                            </span>
+                          </span>
+                          <span style={{ color: "var(--mist-2)" }}>›</span>
+                        </Link>
+                      );
+                    })}
+                    <Link to="/create" onClick={() => setPlansOpen(false)} className="menu-row"
+                      style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 8px", borderRadius: 9, marginTop: 4, borderTop: "1px solid var(--line)", textDecoration: "none" }}>
+                      <span style={{ color: "var(--lamplight)" }}>＋</span>
+                      <span style={{ fontSize: "0.8rem", color: "var(--mist)" }}>New plan</span>
+                    </Link>
                   </div>
                 )}
               </span>
             )}
             <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
               <a className="btn btn-ghost" href={CONFIG.github} target="_blank" rel="noreferrer"
-                style={{ padding: "6px 12px", fontSize: "0.72rem" }} title="Source code & threat model">
+                style={{ padding: "6px 12px", fontSize: "0.72rem", whiteSpace: "nowrap" }} title="Source code & threat model">
                 GitHub ↗
               </a>
               <span style={{ position: "relative" }}>
                 <button className="btn btn-ghost" onClick={() => setFaucetOpen((o) => !o)}
-                  style={{ padding: "6px 12px", fontSize: "0.72rem" }} title="Free testnet funds — pick the right ledger">
+                  style={{ padding: "6px 12px", fontSize: "0.72rem", whiteSpace: "nowrap" }} title="Free testnet funds — pick the right ledger">
                   Faucet ▾
                 </button>
                 {faucetOpen && (
@@ -225,7 +296,7 @@ export default function App() {
             {wallet.address || evm.address ? (
               <span style={{ position: "relative" }}>
                 <button className="pill gold" title={wallet.address ?? evm.address ?? ""} onClick={() => setAcctOpen((o) => !o)}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer", background: "none" }}>
+                  style={{ display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer", background: "none", whiteSpace: "nowrap" }}>
                   {evm.address && evm.icon ? <img src={evm.icon} alt="" style={{ width: 14, height: 14, borderRadius: 4 }} /> : <span>●</span>}
                   {short((wallet.address ?? evm.address) as string, 6)} · {wallet.address ? "GemWallet" : evm.kind}
                   <span style={{ width: 7, height: 7, borderRadius: "50%", background: wallet.address || evm.chainOk ? "var(--verdant)" : "var(--ember)" }} />
@@ -280,10 +351,16 @@ export default function App() {
                         View on explorer ↗
                       </a>
                     </div>
-                    <button className="btn btn-ghost" onClick={disconnect}
-                      style={{ width: "100%", marginTop: 14, padding: "8px 0", fontSize: "0.8rem", color: "var(--ember)", borderColor: "color-mix(in srgb, var(--ember) 40%, transparent)" }}>
-                      Disconnect
-                    </button>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingTop: 11, borderTop: "1px solid var(--line)" }}>
+                      <button onClick={() => { setAcctOpen(false); setModalOpen(true); }}
+                        style={{ background: "none", border: "none", color: "var(--mist-2)", fontSize: "0.74rem", cursor: "pointer", padding: 0 }}>
+                        Change wallet
+                      </button>
+                      <button onClick={disconnect}
+                        style={{ background: "none", border: "none", color: "var(--ember)", fontSize: "0.74rem", cursor: "pointer", padding: 0 }}>
+                        Disconnect ⏻
+                      </button>
+                    </div>
                   </div>
                 )}
               </span>
