@@ -46,6 +46,21 @@ export async function payWithMemo(opts: {
   return res.result?.hash ?? null;
 }
 
+/** Testnet XRP balance via the public JSON-RPC endpoint (null when unreachable). */
+export async function xrpBalance(address: string): Promise<string | null> {
+  try {
+    const r = await fetch("https://s.altnet.rippletest.net:51234/", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ method: "account_info", params: [{ account: address, ledger_index: "validated" }] }),
+    });
+    const j = await r.json();
+    const drops = j?.result?.account_data?.Balance;
+    return drops ? (Number(drops) / 1e6).toFixed(2) : null;
+  } catch {
+    return null;
+  }
+}
+
 export const strToHex = (s: string) =>
   Array.from(new TextEncoder().encode(s))
     .map((b) => b.toString(16).padStart(2, "0"))
