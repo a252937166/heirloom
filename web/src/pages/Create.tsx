@@ -5,6 +5,7 @@ import { useWallet } from "../App";
 import { payWithMemo } from "../lib/gem";
 import { short } from "../lib/chain";
 import { NodeStepper } from "../components/NodeStepper";
+import { buildRecoveryManifest, downloadManifest } from "../lib/recovery";
 import type { KeeperEvent } from "./Vault";
 
 type Draft = {
@@ -33,19 +34,42 @@ export function Create() {
     challenge: CONFIG.demo.challenge,
     lots: 2,
   });
-  const [created, setCreated] = useState<{ vault: string; reference: string; fundingMemo: string; grossDrops: string } | null>(null);
-  const [quote, setQuote] = useState<{ exactPaymentDrops: string; paymentAddress: string; expiresAt: number } | null>(null);
+  const [created, setCreated] = useState<{ vault: string; reference: string; fundingMemo: string; grossDrops: string; paymentAddress?: string; vetoProofGrace: number } | null>(null);
+  type Quote = {
+    exactPaymentDrops: string; paymentAddress: string; expiresAt: number;
+    breakdown?: { feeBIPS: string; minimumFeeUBA: string; executorFeeUBA: string; source: string };
+    largeMint?: { thresholdUBA: string; delaySeconds: number; wouldDelay: boolean };
+  };
+  const [quote, setQuote] = useState<Quote | null>(null);
   // a payment quote is only trustworthy while fresh — refetch at pay time, never reuse stale amounts
   async function freshQuote() {
     const r = await fetch(`${CONFIG.api}/direct-mint/quote?lots=${draft.lots}`);
     if (!r.ok) throw new Error(await r.text());
     const q = await r.json();
     setQuote(q);
-    return q as { exactPaymentDrops: string; paymentAddress: string; expiresAt: number };
+    return q as Quote;
   }
   const [paidTx, setPaidTx] = useState<string | null>(null);
   const [manualTx, setManualTx] = useState("");
   const [progress, setProgress] = useState<KeeperEvent[]>([]);
+  // quote expiry: the keeper's quote lives ~2 minutes (expiresAt, unix seconds).
+  // Count it down every second; at zero clear it (stale amounts must disappear)
+  // and re-quote automatically, capped so a dead API can't loop forever.
+  const [quoteLeft, setQuoteLeft] = useState<number | null>(null);
+  const [autoRefreshes, setAutoRefreshes] = useState(0);
+  useEffect(() => {
+    if (!quote || step !== 4 || paidTx) { setQuoteLeft(null); return; }
+    const tick = () => setQuoteLeft(Math.max(0, quote.expiresAt - Math.floor(Date.now() / 1000)));
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [quote, step, paidTx]);
+  useEffect(() => {
+    if (quoteLeft !== 0 || !quote) return;
+    setQuote(null);
+    if (autoRefreshes < 10) { setAutoRefreshes((n) => n + 1); freshQuote().catch(() => {}); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteLeft]);
 
   const set = (k: keyof Draft, v: string | number) => setDraft((d) => ({ ...d, [k]: v }));
   const owner = draft.ownerXrpl || wallet.address || "";
@@ -71,12 +95,15 @@ export function Create() {
   async function createVault() {
     setBusy(true); setErr(null);
     try {
+      // pin the veto-proof grace explicitly (mirrors the keeper default) so the
+      // locally-generated recovery file always matches what went on-chain
+      const vetoProofGrace = evmMode ? 0 : 180;
       const r = await fetch(`${CONFIG.api}/vaults`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(evmMode ? { ...draft, ownerXrpl: undefined, ownerEvm: evm.address } : { ...draft, ownerXrpl: owner }),
+        body: JSON.stringify(evmMode ? { ...draft, ownerXrpl: undefined, ownerEvm: evm.address, vetoProofGrace } : { ...draft, ownerXrpl: owner, vetoProofGrace }),
       });
       if (!r.ok) throw new Error(await r.text());
-      setCreated(await r.json());
+      setCreated({ ...(await r.json()), vetoProofGrace });
       refreshPlans();
       freshQuote().catch(() => {});
       setStep(4);
@@ -282,7 +309,7 @@ export function Create() {
             <div className="kv-row"><span className="k">Heartbeat period</span><span className="v">{mins(draft.heartbeatPeriod)} (demo)</span></div>
             <div className="kv-row"><span className="k">Grace period</span><span className="v">{mins(draft.grace)}</span></div>
             <div className="kv-row"><span className="k">Final veto window</span><span className="v">{mins(draft.challenge)}</span></div>
-            <div className="kv-row"><span className="k">Protected amount</span><span className="v">{draft.lots * 10}.00 XRP (you send ≈ {(Math.ceil((draft.lots * 10 + 0.1 + 0.15) / 0.9975 * 100) / 100).toFixed(2)})</span></div>
+            <div className="kv-row"><span className="k">Protected amount</span><span className="v">{draft.lots * 10}.00 XRP (you send ≈ {(draft.lots * 10 + 0.2).toFixed(2)} — exact amount live-quoted at payment)</span></div>
             <div className="kv-row"><span className="k">Owner ({evmMode ? evm.kind ?? "EVM" : "your wallet"})</span><span className="v">{evmMode ? short(evm.address ?? "", 8) : short(owner, 8)}</span></div>
           </div>
           <div className="notice" style={{ marginBottom: 10 }}>
@@ -315,26 +342,33 @@ export function Create() {
             {evmMode && !wallet.address ? " The memo — not the sender — routes the mint to your vault, so any funded testnet account works." : ""}
           </p>
 
+          {!paidTx && (quote && quoteLeft != null ? (
+            <p className="mono" style={{ fontSize: "0.72rem", marginBottom: 12, color: quoteLeft <= 15 ? "var(--ember)" : "var(--mist-2)" }}>
+              Quote valid for {String(Math.floor(quoteLeft / 60)).padStart(2, "0")}:{String(quoteLeft % 60).padStart(2, "0")} — amounts re-quote automatically at expiry.
+            </p>
+          ) : (
+            <div className="notice" style={{ marginBottom: 14, display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <span>{autoRefreshes >= 10
+                ? "Auto-refresh paused after 10 quotes — refresh manually to continue."
+                : "Fetching a live payment quote — payment unlocks once it arrives (never pay from stale numbers)."}</span>
+              <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: "0.76rem" }} onClick={() => { setAutoRefreshes(0); freshQuote().catch(() => {}); }}>Refresh quote</button>
+            </div>
+          ))}
           {wallet.address ? (
-            !paidTx && <button className="btn btn-primary" disabled={busy} onClick={payFunding}>{busy ? "Waiting for wallet…" : `Protect ${draft.lots * 10} XRP`}</button>
+            !paidTx && <button className="btn btn-primary" disabled={busy || !quote} onClick={payFunding}>{busy ? "Waiting for wallet…" : `Protect ${draft.lots * 10} XRP`}</button>
           ) : (
             !paidTx && (
               <>
-                {quote ? (
+                {quote && (
                   <div className="status-grid" style={{ marginBottom: 14 }}>
                     <div className="stat"><div className="k">Send exactly (live testnet quote)</div><div className="v">{(Number(quote.exactPaymentDrops) / 1e6).toFixed(2)} XRP</div></div>
                     <div className="stat"><div className="k">To</div><div className="v mono">{quote.paymentAddress}</div></div>
                     <div className="stat" style={{ gridColumn: "1 / -1" }}><div className="k">Memo (routes the mint to your vault)</div><div className="v mono">{created.fundingMemo}</div></div>
                   </div>
-                ) : (
-                  <div className="notice" style={{ marginBottom: 14, display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                    <span>Fetching a live payment quote — manual payment details unlock once it arrives (never pay from stale numbers).</span>
-                    <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: "0.76rem" }} onClick={() => freshQuote().catch(() => {})}>Retry</button>
-                  </div>
                 )}
                 <div className="field">
                   <label>After sending, paste your XRPL transaction hash</label>
-                  <input placeholder="64-character hash…" value={manualTx} onChange={(e) => setManualTx(e.target.value.trim())} />
+                  <input placeholder="64-character hash…" value={manualTx} disabled={!quote} onChange={(e) => setManualTx(e.target.value.trim())} />
                   <span className="hint">The keeper also auto-detects core-vault payments within ~30 s — the hash just makes it instant.</span>
                 </div>
                 <button className="btn btn-primary" disabled={busy || !quote} onClick={submitManualTx}>I've sent it — track my payment</button>
@@ -395,10 +429,29 @@ export function Create() {
 
           <details style={{ marginTop: 16 }}>
             <summary style={{ cursor: "pointer", color: "var(--mist-2)", fontSize: "0.8rem" }}>Advanced payment details</summary>
+            {/* ONE source of payment truth: everything here comes from the live quote */}
             <div className="status-grid" style={{ marginTop: 10 }}>
-              <div className="stat"><div className="k">Gross amount</div><div className="v mono">{created.grossDrops} drops</div></div>
-              <div className="stat"><div className="k">FAssets core vault</div><div className="v mono">{CONFIG.coreVaultXrpl}</div></div>
-              <div className="stat" style={{ gridColumn: "1 / -1" }}><div className="k">Mint memo</div><div className="v mono">{created.fundingMemo}</div></div>
+              {quote ? (
+                <>
+                  <div className="stat"><div className="k">Live quote amount</div><div className="v mono">{quote.exactPaymentDrops} drops</div></div>
+                  <div className="stat"><div className="k">Payment address (live quote)</div><div className="v mono">{quote.paymentAddress}</div></div>
+                  {quote.breakdown && (
+                    <div className="stat" style={{ gridColumn: "1 / -1" }}>
+                      <div className="k">Protocol fees ({quote.breakdown.source})</div>
+                      <div className="v mono">max(gross×{quote.breakdown.feeBIPS}/10000, {Number(quote.breakdown.minimumFeeUBA) / 1e6} XRP) + {Number(quote.breakdown.executorFeeUBA) / 1e6} XRP executor</div>
+                    </div>
+                  )}
+                  {quote.largeMint?.wouldDelay && (
+                    <div className="stat" style={{ gridColumn: "1 / -1" }}>
+                      <div className="k">Large-mint delay</div>
+                      <div className="v">this size exceeds the protocol threshold — execution is delayed ≈{Math.round(quote.largeMint.delaySeconds / 60)} min (same proof, no second payment)</div>
+                    </div>
+                  )}
+                  <div className="stat" style={{ gridColumn: "1 / -1" }}><div className="k">Mint memo</div><div className="v mono">{created.fundingMemo}</div></div>
+                </>
+              ) : (
+                <div className="stat" style={{ gridColumn: "1 / -1" }}><div className="k">No live quote</div><div className="v">refresh above — payment details come only from a fresh quote</div></div>
+              )}
             </div>
           </details>
         </div>
@@ -412,14 +465,28 @@ export function Create() {
             hand it over, and — while you're both here — run one practice claim and watch it get refused.
           </p>
           <ol style={{ color: "var(--mist)", fontSize: "0.92rem", paddingLeft: 20, marginBottom: 18, display: "grid", gap: 6 }}>
-            <li>Print the Recovery Kit and give it to your beneficiary.</li>
+            <li>Download the recovery file (and print the Kit) — give both to your beneficiary.</li>
             <li>Have them open the claim page and run "Test early-claim protection".</li>
             <li>{evmMode ? "Open your plan and press “Check in” — one wallet click resets the dial." : "Send your first heartbeat and watch the dial reset."}</li>
           </ol>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <button className="btn btn-primary" onClick={() => nav(`/vault/${created.vault}`)}>Open my plan</button>
+            <button className="btn btn-primary" onClick={() => downloadManifest(buildRecoveryManifest({
+              vault: created.vault,
+              ownerMode: evmMode ? "evm" : "xrpl",
+              owner: evmMode ? (evm.address ?? "") : owner,
+              beneficiaryXrpl: draft.beneficiaryXrpl,
+              heartbeatReference: created.reference,
+              beacon: CONFIG.beacon,
+              rules: { heartbeatPeriodSec: draft.heartbeatPeriod, gracePeriodSec: draft.grace, challengePeriodSec: draft.challenge, vetoProofGraceSec: created.vetoProofGrace },
+              claimUrl: `${window.location.origin}/claim/${created.vault}`,
+            }))}>⇩ Download recovery file</button>
+            <button className="btn btn-ghost" onClick={() => nav(`/vault/${created.vault}`)}>Open my plan</button>
             <button className="btn btn-ghost" onClick={() => window.open(`/kit/${created.vault}`, "_blank")}>Recovery Kit (print)</button>
           </div>
+          <p className="hint" style={{ fontSize: "0.72rem", color: "var(--mist-2)", marginTop: 10 }}>
+            The file is generated locally from your plan — no server involved. Save it with your estate
+            documents; the claim recipe inside works even if Heirloom disappears.
+          </p>
         </div>
       )}
     </main>

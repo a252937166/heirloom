@@ -40,7 +40,7 @@ with a machine-generated, chain-verified manifest (`spike/build-case.mjs` → `w
 | Early-claim drill | blocked on-chain via staticCall — `SilenceNotProven`, funds moved 0 (recorded in the journal) |
 | Release timing | waited out challenge **+ 120s** challenge, then the 180s veto-proof grace — the XRPL timestamp decides a veto, never transaction ordering |
 | Redeemed | 10.07569 FXRP — the FULL balance, request `#39635850` decoded from the release receipt |
-| Delivered | **10.03 XRP** on the beneficiary's own wallet — settlement memo **equals** `RedemptionRequested.paymentReference`, byte for byte |
+| Delivered | **10.025312 XRP** (redeemed 10.07569 − 0.050378 agent fee, exact to the drop; ≈10.03) on the beneficiary's own wallet — settlement memo **equals** `RedemptionRequested.paymentReference`, byte for byte |
 | Final balance | **0 FXRP — fully reconciled** |
 | Verdict | `SETTLED · FULLY RECONCILED` — five integrity checks, all generated from public data |
 
@@ -73,9 +73,10 @@ beneficiary's wallet ◀─── real XRP
 
 1. **60 seconds:** open https://heirloom.axiqo.xyz/case/001 — the **Live Case Dashboard**: one real completed
    lifecycle in seven chapters (promise → funding → heartbeat → blocked early claim → silence proof →
-   challenge + veto-proof grace → 10.03 XRP delivered, final balance 0), with a dual-ledger transaction rail, a reconciled payout receipt whose
+   challenge + veto-proof grace → 10.025312 XRP delivered, final balance 0), with a dual-ledger transaction rail, a reconciled payout receipt whose
    five integrity checks are generated from chain data (`spike/build-case.mjs`), and a 90-second guided tour.
-   No wallet, no waiting, every claim clickable to its explorer page.
+   No wallet, no waiting — every on-chain transaction is clickable to its explorer page; the early-claim
+   drill is a reproducible `staticCall` via the open-source keeper endpoint (no transaction exists, by design).
 2. **5 minutes:** *Create a plan* → connect [GemWallet](https://gemwallet.app) (XRPL-native, the primary path)
    — or the alternative EVM-owner setup (MetaMask/OKX; Coston2 auto-added, one-click check-ins, silence
    measured by consensus time — a simpler model, honestly labelled) — or paste any funded testnet address. The keeper

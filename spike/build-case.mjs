@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { provider, curlJson, xrplRpc, VAULT_ABI, vaultConfig, log } from "./fdc-lib.mjs";
 
 const dep = JSON.parse(readFileSync(new URL("../contracts/deployments.real.json", import.meta.url), "utf8"));
-const VAULT = process.argv[2] ?? "0x5655FED767c4315218393c5501c3624917a9BaEB";
+const VAULT = process.argv[2] ?? "0x35975770e1eD5431e0bFCaBB238B6188c94AeAdA";
 const API = process.argv[3] ?? "https://heirloom.axiqo.xyz/api";
 
 const v = new Contract(VAULT, VAULT_ABI, provider);
@@ -73,10 +73,11 @@ if (!heartbeatTxFlare) {
 // keeper to executeDirectMinting (the event then has no hash on record)
 let mintTxFlare = minted?.txFlare ?? null;
 let redeemedFxrp = null;
+let mintRow = null;
 try {
   const bs = await curlJson(`https://coston2-explorer.flare.network/api?module=account&action=tokentx&address=${VAULT}`);
   const rows = Array.isArray(bs.result) ? bs.result : [];
-  const mintRow = rows.find((t) => t.to?.toLowerCase() === VAULT.toLowerCase() && /^0x0+$/.test(t.from));
+  mintRow = rows.find((t) => t.to?.toLowerCase() === VAULT.toLowerCase() && /^0x0+$/.test(t.from)) ?? null;
   if (!mintTxFlare && mintRow) mintTxFlare = mintRow.hash;
   const burnRow = rows.find((t) => t.from?.toLowerCase() === VAULT.toLowerCase());
   if (burnRow) redeemedFxrp = (Number(burnRow.value) / 1e6).toString();
@@ -96,27 +97,60 @@ if (settled?.txXrpl) {
     };
   }
 }
+// --- chain-time truth for the challenge: block timestamps of the claim-start
+// and release transactions, plus the vault's own cutoff/eligibility views
+// (executeRelease never zeroes them, so they stay queryable at state 5).
+// The keeper journal's wall-clock `.at` stamps are evidence, not proof.
+const blockTsOf = async (h) => {
+  try {
+    const rc = await provider.getTransactionReceipt(h);
+    return rc ? Number((await provider.getBlock(rc.blockNumber)).timestamp) : null;
+  } catch { return null; }
+};
+const claimTs = claimStarted?.txFlare ? await blockTsOf(claimStarted.txFlare) : null;
+const releaseTs = released?.txFlare ? await blockTsOf(released.txFlare) : null;
+const [cutoffChain, eligibleChain] = await Promise.all([
+  v.claimChallengeEndsAt().catch(() => 0n),
+  v.releaseEligibleAt().catch(() => 0n),
+]);
+const graceSec = Number(cfg.vetoProofGrace ?? 0);
+const heartbeatCutoffAt = Number(cutoffChain) || (claimTs != null ? claimTs + Number(cfg.challengePeriod) : null);
+const releaseEligibleAt = Number(eligibleChain) || (heartbeatCutoffAt != null ? heartbeatCutoffAt + graceSec : null);
+const challengeRespected = claimTs != null && releaseTs != null &&
+  releaseTs >= claimTs + Number(cfg.challengePeriod) + graceSec;
+
+// residual threshold: the contract's own gate is assetManager.minimumRedeemAmountUBA()
+// (HeirloomVault.executeRelease) — read it live, fall back to the config lot size
+let minRedeemUBA = Number(cfg.lotSizeUBA);
+let minRedeemSource = "vault-config lot size";
+try {
+  const am = new Contract(dep.assetManager, ["function minimumRedeemAmountUBA() view returns (uint256)"], provider);
+  minRedeemUBA = Number(await am.minimumRedeemAmountUBA());
+  minRedeemSource = "assetManager.minimumRedeemAmountUBA()";
+} catch {}
+
 const destMatches = !!settleTx && keccak256(toUtf8Bytes(settleTx.destination)) === cfg.beneficiaryXrplHash;
 const refBound = !!settleTx?.memoHex && !!redemption &&
   settleTx.memoHex.toLowerCase() === redemption.paymentReference.slice(2).toLowerCase();
-const challengeRespected = !!(claimStarted && released) &&
-  released.at >= claimStarted.at + Number(cfg.challengePeriod);
 const balanceUBA = Number(balance);
-const lotUBA = Number(cfg.lotSizeUBA);
 const releasedState = Number(state) === 5;
 const zeroBalance = balanceUBA === 0;
-const residualBelowLot = balanceUBA > 0 && balanceUBA < lotUBA;
-const linksPresent = [mintTxFlare, settled?.txXrpl, released?.txFlare].every(Boolean);
+const residualBelowMin = balanceUBA > 0 && balanceUBA < minRedeemUBA;
+const linksPresent = [
+  first("created")?.txFlare, first("funding")?.txXrpl, mintTxFlare,
+  first("heartbeat")?.txXrpl, heartbeatTxFlare, silence?.txFlare,
+  claimStarted?.txFlare, released?.txFlare, settleTx?.hash,
+].every(Boolean);
 
 const checks = [
   { label: "Payout destination matches the configured beneficiary (hash preimage verified against XRPL tx)", passed: destMatches },
   { label: "Settlement memo EQUALS the RedemptionRequested paymentReference (decoded from the release receipt)", passed: refBound },
-  { label: "Challenge window fully elapsed before the release executed", passed: challengeRespected },
+  { label: "Challenge and veto-proof grace fully elapsed before release (verified from chain block timestamps)", passed: challengeRespected },
   { label: zeroBalance
       ? "Final vault FXRP balance is zero — fully reconciled"
-      : `The vault redeemed the maximum the FAssets protocol accepts; the remaining ${(balanceUBA / 1e6).toFixed(2)} FXRP is below the protocol redemption minimum and stays publicly visible on-chain`,
-    passed: releasedState && (zeroBalance || residualBelowLot) },
-  { label: "All key claims carry public transaction hashes", passed: linksPresent },
+      : `The vault redeemed the maximum the FAssets protocol accepts; the remaining ${(balanceUBA / 1e6).toFixed(2)} FXRP is below the protocol's minimum redeemable amount (${(minRedeemUBA / 1e6)} FXRP via ${minRedeemSource}) and stays publicly visible on-chain`,
+    passed: releasedState && (zeroBalance || residualBelowMin) },
+  { label: "All nine lifecycle claims carry public transaction hashes", passed: linksPresent },
 ];
 const allPassed = checks.every((c) => c.passed);
 const verdict = !releasedState ? "SETTLEMENT IN PROGRESS"
@@ -132,8 +166,14 @@ const manifest = {
   vault: VAULT,
   finalState: Number(state),
   verdict,
-  protectedFxrp: minted?.label.match(/([\d.]+) FXRP/)?.[1] ?? null,
-  payoutXrp: settledAll.map((s) => s.label.match(/([\d.]+) XRP/)?.[1]).filter(Boolean).join(" + ") || null,
+  // amounts come from chain data (FXRP mint transfer / XRPL delivered_amount);
+  // the journal label is only a disclosed fallback
+  protectedFxrp: mintRow?.value ? (Number(mintRow.value) / 1e6).toString()
+    : (minted?.label.match(/([\d.]+) FXRP/)?.[1] ?? null),
+  protectedFxrpSource: mintRow?.value ? "chain" : "journal-label",
+  payoutXrp: settleTx?.amountDrops ? (Number(settleTx.amountDrops) / 1e6).toString()
+    : (settledAll.map((s) => s.label.match(/([\d.]+) XRP/)?.[1]).filter(Boolean).join(" + ") || null),
+  payoutXrpSource: settleTx?.amountDrops ? "chain" : "journal-label",
   finalFxrpBalance: (balanceUBA / 1e6).toFixed(balanceUBA % 1e6 === 0 ? 0 : 2),
   heartbeatEpochs: Number(epoch),
   fdcRounds: [...new Set(events.map((e) => e.round).filter(Boolean))],
@@ -156,7 +196,14 @@ const manifest = {
   redeemedFxrp,
   settlement: settleTx,
   releaseTxFlare: released?.txFlare ?? null,
-  challenge: claimStarted ? { startedAt: claimStarted.at, endedAt: claimStarted.at + Number(cfg.challengePeriod) } : null,
+  challenge: claimTs != null ? {
+    startedAt: claimTs,                    // claim tx block timestamp (chain)
+    heartbeatCutoffAt,                     // vault view claimChallengeEndsAt()
+    vetoProofGraceSec: graceSec,
+    releaseEligibleAt,                     // vault view releaseEligibleAt()
+    releaseExecutedAt: releaseTs,          // release tx block timestamp (chain)
+    endedAt: heartbeatCutoffAt,            // legacy alias for older readers
+  } : null,
   residualNote: residualEv?.label ?? null,
   integrityChecks: checks,
 };

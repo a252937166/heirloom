@@ -32,6 +32,55 @@ const fxrp = new Contract(dep.fxrp, ["function balanceOf(address) view returns (
 const assetManager = new Contract(dep.assetManager, [
   `function executeDirectMinting(tuple(bytes32[] merkleProof, ${XRP_DATA} data) _payment) payable`,
 ], agent);
+const amSettings = new Contract(dep.assetManager, [
+  "function directMintingPaymentAddress() view returns (string)",
+  "function getDirectMintingFeeBIPS() view returns (uint256)",
+  "function getDirectMintingMinimumFeeUBA() view returns (uint256)",
+  "function getDirectMintingExecutorFeeUBA() view returns (uint256)",
+  "function getDirectMintingLargeMintingThresholdUBA() view returns (uint256)",
+  "function getDirectMintingLargeMintingDelaySeconds() view returns (uint256)",
+  "function directMintingDelayState(bytes32) view returns (uint8 delayState, uint256 allowedAt, uint256 startedAt)",
+], provider);
+
+// live protocol settings for direct-minting quotes (60s cache). The static
+// fallback keeps the funding flow alive through RPC blips — and is disclosed
+// via `source`, never silently.
+let _mintSettings = { at: 0, v: null };
+async function mintSettings() {
+  if (_mintSettings.v && Date.now() - _mintSettings.at < 60_000) return _mintSettings.v;
+  try {
+    const [feeBIPS, minFee, execFee, largeThreshold, largeDelay, payAddr] = await Promise.all([
+      amSettings.getDirectMintingFeeBIPS(), amSettings.getDirectMintingMinimumFeeUBA(),
+      amSettings.getDirectMintingExecutorFeeUBA(), amSettings.getDirectMintingLargeMintingThresholdUBA(),
+      amSettings.getDirectMintingLargeMintingDelaySeconds(), amSettings.directMintingPaymentAddress(),
+    ]);
+    _mintSettings = { at: Date.now(), v: {
+      feeBIPS: BigInt(feeBIPS), minFee: BigInt(minFee), execFee: BigInt(execFee),
+      largeThreshold: BigInt(largeThreshold), largeDelay: Number(largeDelay),
+      paymentAddress: payAddr?.startsWith("r") ? payAddr : dep.coreVaultXrpl, source: "asset-manager",
+    } };
+  } catch {
+    _mintSettings = { at: Date.now(), v: {
+      feeBIPS: 25n, minFee: 100000n, execFee: 100000n,
+      largeThreshold: 100000000000n, largeDelay: 3600,
+      paymentAddress: dep.coreVaultXrpl, source: "static-fallback",
+    } };
+  }
+  return _mintSettings.v;
+}
+
+// protocol formula: mintedUBA = gross − max(⌊gross·feeBIPS/10000⌋, minFee) − executorFee
+// (verified against the canonical case: 10275690 − 100000 − 100000 = 10075690)
+const bmax = (a, b) => (a > b ? a : b);
+const mintedFor = (g, s) => g - bmax((g * s.feeBIPS) / 10000n, s.minFee) - s.execFee;
+function grossForNet(netUBA, s) {
+  let g = netUBA + s.minFee + s.execFee; // min-fee regime (all demo sizes)
+  if ((g * s.feeBIPS) / 10000n > s.minFee) {
+    g = ((netUBA + s.execFee) * 10000n + (10000n - s.feeBIPS - 1n)) / (10000n - s.feeBIPS); // ceil
+  }
+  while (mintedFor(g, s) < netUBA) g += 1n; // exact forward check (≤2 steps)
+  return g;
+}
 
 // --- persistent event store ---------------------------------------------------
 const storeFile = new URL("./keeper-state.json", import.meta.url);
@@ -66,6 +115,9 @@ const persist = () => {
   renameSync(tmp, storeFile);
 };
 const journal = (obj) => { try { appendFileSync(journalFile, JSON.stringify(obj) + "\n"); } catch { /* best-effort */ } };
+// durable meta writes: without these, a journal rebuild after state-file
+// corruption would lose redemptions/settlements — loadStore replays them
+const journalMeta = (addr, patch) => journal({ type: "meta", vault: addr.toLowerCase(), meta: jsonSafe(patch) });
 function rec(vaultAddr, kind, label, extra = {}) {
   const v = (store.vaults[vaultAddr.toLowerCase()] ??= { events: [], meta: {} });
   const event = { at: Math.floor(Date.now() / 1000), kind, label, ...extra };
@@ -121,27 +173,33 @@ let BUILD_SHA = "dev";
 try { BUILD_SHA = readFileSync(new URL("../BUILD_SHA", import.meta.url), "utf8").trim(); } catch { /* dev run */ }
 app.get("/api/health", (_req, res) => res.json({ ok: true, build: BUILD_SHA, factory: dep.factory, beacon: BEACON, at: Date.now() }));
 
-// direct-mint quote: exact drops + payment address, refreshed at pay time.
-// Best-effort dynamic address (newer AssetManagers expose it); falls back to
-// the deployment's core vault. Quotes expire — never pay from a stale one.
+// direct-mint quote: protocol-exact drops computed from the AssetManager's
+// LIVE direct-minting settings, paid to the live directMintingPaymentAddress().
+// Quotes expire — never pay from a stale one.
 app.get("/api/direct-mint/quote", async (req, res) => {
   try {
     const lots = Math.max(1, Math.min(10, Number(req.query.lots ?? 2)));
-    const net = lots * (Number(dep.lotSizeUBA) / 1e6);
-    const grossDrops = Math.ceil((net + 0.1 + 0.15) / 0.9975 * 1e6);
-    let paymentAddress = dep.coreVaultXrpl;
-    try {
-      const dyn = new Contract(dep.assetManager, ["function getDirectMintingPaymentAddress() view returns (string)"], provider);
-      const a = await dyn.getDirectMintingPaymentAddress();
-      if (a && a.startsWith("r")) paymentAddress = a;
-    } catch { /* older AssetManager — deployment address is authoritative */ }
+    const netUBA = BigInt(lots) * BigInt(dep.lotSizeUBA);
+    const s = await mintSettings();
+    const grossUBA = grossForNet(netUBA, s);
     res.json({
       quoteId: hexlify(randomBytes(8)),
       lots,
-      netMintUBA: String(lots * Number(dep.lotSizeUBA)),
-      exactPaymentDrops: String(grossDrops),
-      paymentAddress,
-      feeNote: "includes the FAssets minting fee (0.25%) + executor fee + safety margin",
+      netMintUBA: String(netUBA),
+      exactPaymentDrops: String(grossUBA), // drops == UBA for XRP
+      paymentAddress: s.paymentAddress,
+      breakdown: {
+        feeBIPS: String(s.feeBIPS),
+        minimumFeeUBA: String(s.minFee),
+        executorFeeUBA: String(s.execFee),
+        source: s.source,
+      },
+      largeMint: {
+        thresholdUBA: String(s.largeThreshold),
+        delaySeconds: s.largeDelay,
+        wouldDelay: grossUBA >= s.largeThreshold,
+      },
+      feeNote: `protocol-exact from live AssetManager settings: fee = max(gross×${s.feeBIPS}/10000, ${Number(s.minFee) / 1e6} XRP floor) + ${Number(s.execFee) / 1e6} XRP executor fee — no hidden margin`,
       issuedAt: Math.floor(Date.now() / 1000),
       expiresAt: Math.floor(Date.now() / 1000) + 120,
     });
@@ -180,12 +238,14 @@ app.post("/api/vaults", async (req, res) => {
     const ev = rc.logs.map((l) => { try { return factory.interface.parseLog(l); } catch { return null; } }).find((p) => p?.name === "VaultCreated");
     const vault = ev.args.vault;
     const meta = metaOf(vault);
-    Object.assign(meta, { ownerXrpl: evmMode ? null : ownerXrpl, ownerEvm: evmMode ? ownerEvm : null, mode: evmMode ? "evm" : "xrpl", beneficiaryXrpl, reference, createdTx: tx.hash });
-    // gross: net = lots*10 XRP; fee 0.25% + 0.1 executor + margin 0.15
-    const net = lots * 10;
-    const gross = Math.ceil((net + 0.1 + 0.15) / 0.9975 * 1e6);
+    // protocol-exact gross from live settings; remember the quote-time payment
+    // address so the funding scan keeps working even if Flare rotates it
+    const s = await mintSettings();
+    const gross = grossForNet(BigInt(lots) * BigInt(dep.lotSizeUBA), s);
+    Object.assign(meta, { ownerXrpl: evmMode ? null : ownerXrpl, ownerEvm: evmMode ? ownerEvm : null, mode: evmMode ? "evm" : "xrpl", beneficiaryXrpl, reference, createdTx: tx.hash, paymentAddress: s.paymentAddress, grossDrops: String(gross) });
+    journalMeta(vault, { ownerXrpl: meta.ownerXrpl, ownerEvm: meta.ownerEvm, mode: meta.mode, beneficiaryXrpl, reference, createdTx: tx.hash, paymentAddress: meta.paymentAddress, grossDrops: meta.grossDrops });
     rec(vault, "created", `Vault created for ${(evmMode ? ownerEvm : ownerXrpl).slice(0, 8)}… → ${beneficiaryXrpl.slice(0, 8)}… (${evmMode ? "MetaMask/OKX owner" : "XRPL owner"})`, { txFlare: tx.hash, tone: "gold" });
-    res.json({ vault, reference, fundingMemo: buildMintMemo(vault), coreVaultXrpl: dep.coreVaultXrpl, grossDrops: String(gross) });
+    res.json({ vault, reference, fundingMemo: buildMintMemo(vault), coreVaultXrpl: dep.coreVaultXrpl, paymentAddress: s.paymentAddress, grossDrops: String(gross) });
   } catch (e) {
     res.status(500).send(e.shortMessage ?? e.message);
   }
@@ -214,8 +274,21 @@ app.post("/api/vaults/:addr/funded", async (req, res) => {
               // the user must never pay twice.
               const meta2 = metaOf(addr);
               meta2.pendingMint = { proof: jsonSafe({ merkleProof: proof.merkleProof, data: proof.data }), tries: 0, at: Date.now() };
+              // the protocol tells us exactly when a delayed mint becomes
+              // executable — schedule the retry instead of blind polling
+              try {
+                const [st, allowedAt] = await amSettings.directMintingDelayState(proof.data.requestBody.transactionId);
+                if (Number(st) === 1) {
+                  meta2.pendingMint.delayState = 1;
+                  meta2.pendingMint.executionAllowedAt = Number(allowedAt);
+                }
+              } catch { /* view unavailable — fixed cadence still applies */ }
+              journalMeta(addr, { pendingMint: meta2.pendingMint });
               persist();
-              rec(addr, "mintPending", "Payment received by the protocol — minting is deferred by FAssets limits. The keeper retries with the same proof; no second payment is needed.", { txFlare: tx.hash, round: proof.meta.round, tone: "warn" });
+              const waitNote = meta2.pendingMint.executionAllowedAt
+                ? ` Protocol allows execution at ${new Date(meta2.pendingMint.executionAllowedAt * 1000).toLocaleTimeString()}.`
+                : "";
+              rec(addr, "mintPending", `Payment received by the protocol — minting is deferred by FAssets limits. The keeper retries with the same proof; no second payment is needed.${waitNote}`, { txFlare: tx.hash, round: proof.meta.round, tone: "warn" });
               return;
             }
             rec(addr, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP`, { txFlare: tx.hash, round: proof.meta.round, tone: "ok" });
@@ -321,6 +394,72 @@ app.post("/api/vaults/:addr/claim", async (req, res) => {
   }
 });
 
+// decode RedemptionRequested logs from any receipt (release OR cancel path)
+function parseRedemptionRequests(rc) {
+  const reqs = [];
+  for (const lg of rc?.logs ?? []) {
+    try {
+      const p = AM_EVENTS.parseLog(lg);
+      if (p?.name === "RedemptionRequested") {
+        reqs.push({
+          requestId: String(p.args.requestId),
+          paymentReference: p.args.paymentReference.toLowerCase(),
+          valueUBA: String(p.args.valueUBA),
+          feeUBA: String(p.args.feeUBA),
+          agentVault: p.args.agentVault,
+          paymentAddress: p.args.paymentAddress,
+          firstUnderlyingBlock: String(p.args.firstUnderlyingBlock),
+          lastUnderlyingBlock: String(p.args.lastUnderlyingBlock),
+          lastUnderlyingTimestamp: String(p.args.lastUnderlyingTimestamp),
+        });
+      }
+    } catch { /* other logs */ }
+  }
+  return reqs;
+}
+function recordRedemptions(addr, meta, reqs) {
+  const known = new Set((meta.redemptions ?? []).map((r) => r.requestId));
+  meta.redemptions = [...(meta.redemptions ?? []), ...reqs.filter((r) => !known.has(r.requestId))];
+  journalMeta(addr, { redemptions: meta.redemptions });
+  persist();
+}
+// watch XRPL for payouts matched by payment reference (release → beneficiary,
+// cancel → owner). Unsettled refs land in awaitingSettlement and feed the
+// permissionless redemption-default path.
+async function watchSettlements(addr, destination, reqs, meta) {
+  if (!destination || reqs.length === 0) return;
+  const wanted = new Set(reqs.map((r) => r.paymentReference));
+  for (let i = 0; i < 80 && wanted.size; i++) {
+    await sleep(15_000);
+    const at = await xrplRpc("account_tx", { account: destination, limit: 15 });
+    for (const t of at.result?.transactions ?? []) {
+      const txj = t.tx_json ?? t.tx;
+      if (!txj || txj.Destination !== destination) continue;
+      const memo = txj.Memos?.[0]?.Memo?.MemoData?.toLowerCase();
+      if (!memo) continue;
+      const ref = "0x" + memo;
+      if (wanted.has(ref)) {
+        wanted.delete(ref);
+        const r = reqs.find((x) => x.paymentReference === ref);
+        const delivered = (t.meta ?? t.metaData)?.delivered_amount ?? txj.Amount;
+        (meta.settlements ??= []).push({ requestId: r.requestId, deliveredDrops: String(delivered), txXrpl: txj.hash ?? t.hash, paymentReference: ref });
+        meta.awaitingSettlement = (meta.awaitingSettlement ?? []).filter((x) => x !== ref);
+        journalMeta(addr, { settlements: meta.settlements, awaitingSettlement: meta.awaitingSettlement });
+        persist();
+        rec(addr, "settled",
+          `Redemption #${r.requestId} settled: ${(Number(delivered) / 1e6).toFixed(2)} XRP delivered with payment reference ${ref.slice(0, 14)}…`,
+          { txXrpl: txj.hash ?? t.hash, tone: "ok" });
+      }
+    }
+  }
+  if (wanted.size) {
+    rec(addr, "settling", "Redemption payment(s) still inside the agent window — tracking by payment reference; if the agent misses the underlying deadline, the FAssets default path (collateral compensation) becomes available", { tone: "warn" });
+    meta.awaitingSettlement = [...new Set([...(meta.awaitingSettlement ?? []), ...wanted])];
+    journalMeta(addr, { awaitingSettlement: meta.awaitingSettlement });
+    persist();
+  }
+}
+
 app.post("/api/vaults/:addr/release", async (req, res) => {
   const { addr } = req.params;
   try {
@@ -331,58 +470,12 @@ app.post("/api/vaults/:addr/release", async (req, res) => {
       const tx = await v.executeRelease();
       const rc = await tx.wait();
       // bind the payout to the ACTUAL redemption request, not a balance change
-      const reqs = [];
-      for (const lg of rc.logs) {
-        try {
-          const p = AM_EVENTS.parseLog(lg);
-          if (p?.name === "RedemptionRequested") {
-            reqs.push({
-              requestId: String(p.args.requestId),
-              paymentReference: p.args.paymentReference.toLowerCase(),
-              valueUBA: String(p.args.valueUBA),
-              feeUBA: String(p.args.feeUBA),
-              agentVault: p.args.agentVault,
-              paymentAddress: p.args.paymentAddress,
-              firstUnderlyingBlock: String(p.args.firstUnderlyingBlock),
-              lastUnderlyingBlock: String(p.args.lastUnderlyingBlock),
-              lastUnderlyingTimestamp: String(p.args.lastUnderlyingTimestamp),
-            });
-          }
-        } catch {}
-      }
-      meta.redemptions = reqs;
-      persist();
+      const reqs = parseRedemptionRequests(rc);
+      recordRedemptions(addr, meta, reqs);
       rec(addr, "released",
         `Release executed — redemption request${reqs.length > 1 ? "s" : ""} ${reqs.map((r) => "#" + r.requestId).join(", ")} for ${reqs.reduce((s, r) => s + Number(r.valueUBA), 0) / 1e6} FXRP`,
         { txFlare: tx.hash, tone: "gold" });
-      if (!beneficiary || reqs.length === 0) return;
-      const wanted = new Set(reqs.map((r) => r.paymentReference));
-      for (let i = 0; i < 80 && wanted.size; i++) {
-        await sleep(15_000);
-        const at = await xrplRpc("account_tx", { account: beneficiary, limit: 15 });
-        for (const t of at.result?.transactions ?? []) {
-          const txj = t.tx_json ?? t.tx;
-          if (!txj || txj.Destination !== beneficiary) continue;
-          const memo = txj.Memos?.[0]?.Memo?.MemoData?.toLowerCase();
-          if (!memo) continue;
-          const ref = "0x" + memo;
-          if (wanted.has(ref)) {
-            wanted.delete(ref);
-            const r = reqs.find((x) => x.paymentReference === ref);
-            const delivered = (t.meta ?? t.metaData)?.delivered_amount ?? txj.Amount;
-            (meta.settlements ??= []).push({ requestId: r.requestId, deliveredDrops: String(delivered), txXrpl: txj.hash ?? t.hash, paymentReference: ref });
-            persist();
-            rec(addr, "settled",
-              `Redemption #${r.requestId} settled: ${(Number(delivered) / 1e6).toFixed(2)} XRP delivered with payment reference ${ref.slice(0, 14)}…`,
-              { txXrpl: txj.hash ?? t.hash, tone: "ok" });
-          }
-        }
-      }
-      if (wanted.size) {
-        rec(addr, "settling", "Redemption payment(s) still inside the agent window — tracking by payment reference; if the agent misses the underlying deadline, the FAssets default path (collateral compensation) becomes available", { tone: "warn" });
-        meta.awaitingSettlement = [...wanted];
-        persist();
-      }
+      await watchSettlements(addr, beneficiary, reqs, meta);
       const residual = Number(await fxrp.balanceOf(addr)) / 1e6;
       if (residual > 0) rec(addr, "residual", `Residual ${residual} FXRP remains (below the protocol redemption minimum)`, { tone: "warn" });
     });
@@ -477,6 +570,7 @@ app.post("/api/vaults/:addr/redemption-default", async (req, res) => {
         const out = await tryRedemptionDefault(addr, r);
         if (out.eligible) {
           meta.awaitingSettlement = (meta.awaitingSettlement ?? []).filter((x) => x !== r.paymentReference);
+          journalMeta(addr, { awaitingSettlement: meta.awaitingSettlement });
           persist();
         } else {
           rec(addr, "settling", `Redemption #${r.requestId}: ${out.reason} — default not yet available`, { tone: "warn" });
@@ -515,7 +609,7 @@ app.get("/api/vaults/:addr", (req, res) => {
     events: v.events,
     job: job ? { name: job.name, startedAt: job.startedAt } : null,
     recovery: { ownerXrpl: ownerXrpl ?? null, ownerEvm: ownerEvm ?? null, mode: mode ?? (ownerEvm ? "evm" : "xrpl"), beneficiaryXrpl: beneficiaryXrpl ?? null, reference: reference ?? null, beacon: BEACON },
-    receipt: { redemptions: v.meta?.redemptions ?? [], settlements: v.meta?.settlements ?? [] },
+    receipt: { redemptions: v.meta?.redemptions ?? [], settlements: v.meta?.settlements ?? [], awaitingSettlement: v.meta?.awaitingSettlement ?? [] },
   });
 });
 
@@ -565,8 +659,16 @@ async function beaconScan() {
             const ownerXrpl = store.vaults[key2]?.meta?.ownerXrpl;
             if (!ownerXrpl) throw new Error("owner address unknown; cancel via Recovery Kit data");
             const ctx = await v.cancel(ownerXrpl, proof);
-            await ctx.wait();
+            const rcx = await ctx.wait();
             rec(vaultAddr, "cancelled", "Plan cancelled — the vault is redeeming everything back to the owner's XRPL wallet", { txFlare: ctx.hash, tone: "gold" });
+            // cancel redemptions get the same tracking as release redemptions:
+            // "returning" vs "returned" must be provable, not assumed
+            const creqs = parseRedemptionRequests(rcx);
+            if (creqs.length) {
+              const cmeta = metaOf(vaultAddr);
+              recordRedemptions(vaultAddr, cmeta, creqs);
+              await watchSettlements(vaultAddr, ownerXrpl, creqs, cmeta);
+            }
           }).catch(() => {});
         }
         continue;
@@ -608,55 +710,75 @@ async function beaconScan() {
 setInterval(beaconScan, 30_000);
 
 // --- core-vault funding scan: manual payers need no tx-hash paperwork --------
+// Scans the union of {deployment core vault, live directMintingPaymentAddress(),
+// every quote-time address stored on our vaults} so a Flare-side address
+// rotation can never blind the auto-detection.
+let _liveAddr = { at: 0, v: null };
+async function livePaymentAddress() {
+  if (Date.now() - _liveAddr.at < 300_000) return _liveAddr.v;
+  try {
+    const a = await amSettings.directMintingPaymentAddress();
+    _liveAddr = { at: Date.now(), v: a?.startsWith("r") ? a : null };
+  } catch { _liveAddr = { at: Date.now(), v: null }; }
+  return _liveAddr.v;
+}
 async function fundingScan() {
   try {
-    const at = await xrplRpc("account_tx", { account: dep.coreVaultXrpl, limit: 25 });
-    for (const t of at.result?.transactions ?? []) {
-      const tx = t.tx_json ?? t.tx;
-      if (!tx || tx.TransactionType !== "Payment" || tx.Destination !== dep.coreVaultXrpl) continue;
-      const memo = tx.Memos?.[0]?.Memo?.MemoData?.toLowerCase();
-      if (!memo || !memo.startsWith(DIRECT_MINT_PREFIX.toLowerCase())) continue;
-      const recipient = "0x" + memo.slice(DIRECT_MINT_PREFIX.length + 8);
-      const key = recipient.toLowerCase();
-      const known = store.vaults[key];
-      if (!known) continue; // not one of our vaults
-      const hash = tx.hash ?? t.hash;
-      // self-healing: a timed-out proof must NOT strand the vault — retry with
-      // a cooldown until the vault leaves PendingFunding (success ends it)
-      const attempts = (known.meta.fundAttempts ??= {});
-      const a = attempts[hash] ?? { n: 0, at: 0 };
-      if (a.n >= 5 || Date.now() - a.at < 60_000) continue;
-      const v = vaultAt(recipient);
-      if (Number(await v.state()) !== 1) continue; // only PendingFunding vaults
-      if (!jobs.get(key)) {
-        attempts[hash] = { n: a.n + 1, at: Date.now() }; persist();
-        runJob(recipient, "funding-auto", async () => {
-          rec(recipient, "funding", `Funding payment detected on the core vault — proving it to Flare (FDC XRPPayment)${a.n ? ` · retry ${a.n + 1}/5` : ""}`, { txXrpl: hash });
-          let bal = await fxrp.balanceOf(recipient);
-          if (bal === 0n) {
-            try {
-              const proof = await proveXrpPayment(agent, hash);
-              bal = await fxrp.balanceOf(recipient);
-              if (bal === 0n) {
-                const mtx = await assetManager.executeDirectMinting({ merkleProof: proof.merkleProof, data: proof.data });
-                await mtx.wait();
+    const addrs = new Set([dep.coreVaultXrpl]);
+    const live = await livePaymentAddress();
+    if (live) addrs.add(live);
+    for (const sv of Object.values(store.vaults)) {
+      if (sv.meta?.paymentAddress) addrs.add(sv.meta.paymentAddress);
+    }
+    for (const acct of addrs) {
+      const at = await xrplRpc("account_tx", { account: acct, limit: 25 });
+      for (const t of at.result?.transactions ?? []) {
+        const tx = t.tx_json ?? t.tx;
+        if (!tx || tx.TransactionType !== "Payment" || tx.Destination !== acct) continue;
+        const memo = tx.Memos?.[0]?.Memo?.MemoData?.toLowerCase();
+        if (!memo || !memo.startsWith(DIRECT_MINT_PREFIX.toLowerCase())) continue;
+        const recipient = "0x" + memo.slice(DIRECT_MINT_PREFIX.length + 8);
+        const key = recipient.toLowerCase();
+        const known = store.vaults[key];
+        if (!known) continue; // not one of our vaults
+        const hash = tx.hash ?? t.hash;
+        // self-healing: a timed-out proof must NOT strand the vault — retry with
+        // a cooldown until the vault leaves PendingFunding (success ends it)
+        const attempts = (known.meta.fundAttempts ??= {});
+        const a = attempts[hash] ?? { n: 0, at: 0 };
+        if (a.n >= 5 || Date.now() - a.at < 60_000) continue;
+        const v = vaultAt(recipient);
+        if (Number(await v.state()) !== 1) continue; // only PendingFunding vaults
+        if (!jobs.get(key)) {
+          attempts[hash] = { n: a.n + 1, at: Date.now() }; persist();
+          runJob(recipient, "funding-auto", async () => {
+            rec(recipient, "funding", `Funding payment detected on the core vault — proving it to Flare (FDC XRPPayment)${a.n ? ` · retry ${a.n + 1}/5` : ""}`, { txXrpl: hash });
+            let bal = await fxrp.balanceOf(recipient);
+            if (bal === 0n) {
+              try {
+                const proof = await proveXrpPayment(agent, hash);
                 bal = await fxrp.balanceOf(recipient);
-                rec(recipient, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP`, { txFlare: mtx.hash, round: proof.meta.round, tone: "ok" });
+                if (bal === 0n) {
+                  const mtx = await assetManager.executeDirectMinting({ merkleProof: proof.merkleProof, data: proof.data });
+                  await mtx.wait();
+                  bal = await fxrp.balanceOf(recipient);
+                  rec(recipient, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP`, { txFlare: mtx.hash, round: proof.meta.round, tone: "ok" });
+                }
+              } catch (e) {
+                bal = await fxrp.balanceOf(recipient);
+                if (bal === 0n) throw e;
               }
-            } catch (e) {
-              bal = await fxrp.balanceOf(recipient);
-              if (bal === 0n) throw e;
             }
-          }
-          if (bal > 0n && !(store.vaults[key]?.events ?? []).some((ev) => ev.kind === "minted")) {
-            rec(recipient, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP (executed by a network executor)`, { tone: "ok" });
-          }
-          if (Number(await v.state()) === 1) {
-            const atx = await v.activate();
-            await atx.wait();
-            rec(recipient, "active", "Vault is ACTIVE — the dial is live", { txFlare: atx.hash, tone: "ok" });
-          }
-        }).catch(() => {});
+            if (bal > 0n && !(store.vaults[key]?.events ?? []).some((ev) => ev.kind === "minted")) {
+              rec(recipient, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP (executed by a network executor)`, { tone: "ok" });
+            }
+            if (Number(await v.state()) === 1) {
+              const atx = await v.activate();
+              await atx.wait();
+              rec(recipient, "active", "Vault is ACTIVE — the dial is live", { txFlare: atx.hash, tone: "ok" });
+            }
+          }).catch(() => {});
+        }
       }
     }
   } catch (e) {
@@ -665,30 +787,51 @@ async function fundingScan() {
 }
 async function pendingScan() {
   for (const [key, sv] of Object.entries(store.vaults)) {
-    // (a) deferred direct mints: retry the SAME proof until FXRP lands
+    // (a) deferred direct mints: retry the SAME proof until FXRP lands. The
+    // protocol's own delay state (executionAllowedAt) schedules the retry —
+    // a Delayed mint waits for its window instead of blind-polling into it.
     const pm = sv.meta?.pendingMint;
-    if (pm && !jobs.get(key) && Date.now() - pm.at > 90_000 && pm.tries < 20) {
-      pm.tries += 1; pm.at = Date.now(); persist();
-      runJob(key, "mint-retry", async () => {
-        let bal = await fxrp.balanceOf(key);
-        if (bal === 0n) {
-          try {
-            const tx = await assetManager.executeDirectMinting(pm.proof);
-            await tx.wait();
-          } catch { /* still deferred or already executed elsewhere */ }
-          bal = await fxrp.balanceOf(key);
+    if (pm && !jobs.get(key)) {
+      const now = Date.now();
+      const dueAt = pm.delayState === 1 && pm.executionAllowedAt
+        ? pm.executionAllowedAt * 1000 + 30_000 // allowedAt + settle margin
+        : pm.at + 90_000;                        // no delay info — fixed cadence
+      if ((pm.tries ?? 0) >= 200) {
+        if (!pm.exhausted) {
+          pm.exhausted = true; persist();
+          rec(key, "error", "Deferred mint: 200 retries exhausted — the same proof remains executable by anyone (permissionless); manual crank required", { tone: "warn" });
         }
-        if (bal > 0n) {
-          delete sv.meta.pendingMint; persist();
-          rec(key, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP (deferred mint settled)`, { tone: "ok" });
-          const v = vaultAt(key);
-          if (Number(await v.state()) === 1) {
-            const atx = await v.activate();
-            await atx.wait();
-            rec(key, "active", "Vault is ACTIVE — the dial is live", { txFlare: atx.hash, tone: "ok" });
+      } else if (now >= dueAt) {
+        pm.tries = (pm.tries ?? 0) + 1; pm.at = now; pm.lastAttemptAt = now; persist();
+        runJob(key, "mint-retry", async () => {
+          let bal = await fxrp.balanceOf(key);
+          if (bal === 0n) {
+            try {
+              const txId = pm.proof?.data?.requestBody?.transactionId;
+              if (txId) {
+                const [st, allowedAt] = await amSettings.directMintingDelayState(txId);
+                pm.delayState = Number(st); pm.executionAllowedAt = Number(allowedAt); persist();
+                if (Number(st) === 1 && Number(allowedAt) * 1000 > Date.now()) return; // still Delayed — don't burn a tx
+              }
+            } catch { /* view unavailable — keep the cadence */ }
+            try {
+              const tx = await assetManager.executeDirectMinting(pm.proof);
+              await tx.wait();
+            } catch { /* still deferred or already executed elsewhere */ }
+            bal = await fxrp.balanceOf(key);
           }
-        }
-      }).catch(() => {});
+          if (bal > 0n) {
+            delete sv.meta.pendingMint; journalMeta(key, { pendingMint: null }); persist();
+            rec(key, "minted", `FXRP minted into the vault: ${Number(bal) / 1e6} FXRP (deferred mint settled)`, { tone: "ok" });
+            const v = vaultAt(key);
+            if (Number(await v.state()) === 1) {
+              const atx = await v.activate();
+              await atx.wait();
+              rec(key, "active", "Vault is ACTIVE — the dial is live", { txFlare: atx.hash, tone: "ok" });
+            }
+          }
+        }).catch(() => {});
+      }
     }
     // (b) cancel redemptions that FAssets fulfilled only partially (state 7)
     if (!jobs.get(key) && !sv.meta?.pendingMint) {
@@ -696,8 +839,15 @@ async function pendingScan() {
         if (Number(st) === 7 && !jobs.get(key)) {
           runJob(key, "cancel-crank", async () => {
             const tx = await vaultAt(key).cancelCrank();
-            await tx.wait();
+            const rcx = await tx.wait();
             rec(key, "cancelled", "Cancel redemption cranked — remaining balance settled toward the owner", { txFlare: tx.hash, tone: "gold" });
+            // track the crank's redemption toward the owner like any other
+            const creqs = parseRedemptionRequests(rcx);
+            if (creqs.length) {
+              const cmeta = metaOf(key);
+              recordRedemptions(key, cmeta, creqs);
+              await watchSettlements(key, cmeta.ownerXrpl, creqs, cmeta);
+            }
           }).catch(() => {});
         }
       }).catch(() => {});
@@ -714,7 +864,12 @@ async function checkpointScan() {
     const meta = sv.meta ?? {};
     if (meta.mode === "evm") continue; // consensus time needs no checkpoints
     if (!meta.ownerXrpl) continue;
-    if (Date.now() - (meta.lastCkptAt ?? 0) < CHECKPOINT_SEC * 1000) continue;
+    // attempt/success split: a FAILED attestation retries on a minutes-scale
+    // backoff instead of silently waiting out a full checkpoint interval
+    // (7 days in production). Legacy lastCkptAt counts as the last success.
+    const ckpt = (meta.ckpt ??= { lastAttemptAt: 0, lastSuccessAt: meta.lastCkptAt ?? 0, failures: 0, nextRetryAt: 0 });
+    const nowMs = Date.now();
+    if (nowMs - ckpt.lastSuccessAt < CHECKPOINT_SEC * 1000 || nowMs < ckpt.nextRetryAt) continue;
     try {
       const v = vaultAt(key);
       if (Number(await v.state()) !== 2) continue;
@@ -722,19 +877,29 @@ async function checkpointScan() {
       const nowTs = Math.floor(Date.now() / 1000);
       // only meaningful once real silence has accumulated beyond the interval
       if (nowTs - Number(lastTs) < CHECKPOINT_SEC || nowTs - Number(provenTs) < CHECKPOINT_SEC) continue;
-      meta.lastCkptAt = Date.now(); persist();
+      ckpt.lastAttemptAt = nowMs; persist();
       runJob(key, "checkpoint", async () => {
-        const nowL = await validatedLedger();
-        const minLedger = Number(await v.nextSilenceLedger());
-        const cfg = await vaultConfig(v);
-        rec(key, "checkpoint", "Rolling silence checkpoint — chaining a proof segment before the attestation window slides away", { tone: "warn" });
-        const proof = await proveSilence(agent, {
-          beacon: BEACON, reference: cfg.heartbeatReference, ownerAddress: meta.ownerXrpl,
-          minLedger, deadlineLedger: nowL.ledger - 4, deadlineTs: nowL.ts - 15,
-        });
-        const stx = await v.attestSilence(proof);
-        await stx.wait();
-        rec(key, "silence", `Checkpoint attested — silence proven through ${new Date(Number(await v.silenceProvenThroughTs()) * 1000).toLocaleTimeString()}`, { txFlare: stx.hash, round: proof.meta.round, tone: "warn" });
+        try {
+          const nowL = await validatedLedger();
+          const minLedger = Number(await v.nextSilenceLedger());
+          const cfg = await vaultConfig(v);
+          rec(key, "checkpoint", "Rolling silence checkpoint — chaining a proof segment before the attestation window slides away", { tone: "warn" });
+          const proof = await proveSilence(agent, {
+            beacon: BEACON, reference: cfg.heartbeatReference, ownerAddress: meta.ownerXrpl,
+            minLedger, deadlineLedger: nowL.ledger - 4, deadlineTs: nowL.ts - 15,
+          });
+          const stx = await v.attestSilence(proof);
+          await stx.wait();
+          ckpt.lastSuccessAt = Date.now(); ckpt.failures = 0; ckpt.nextRetryAt = 0;
+          meta.lastCkptAt = Date.now(); // legacy mirror: a rollback stays sane
+          persist();
+          rec(key, "silence", `Checkpoint attested — silence proven through ${new Date(Number(await v.silenceProvenThroughTs()) * 1000).toLocaleTimeString()}`, { txFlare: stx.hash, round: proof.meta.round, tone: "warn" });
+        } catch (e) {
+          ckpt.failures = (ckpt.failures ?? 0) + 1;
+          ckpt.nextRetryAt = Date.now() + Math.min(60_000 * 2 ** ckpt.failures, 3_600_000);
+          persist();
+          throw e; // runJob still records the error event
+        }
       }).catch(() => {});
     } catch { /* per-vault errors never break the scan */ }
   }

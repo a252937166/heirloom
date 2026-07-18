@@ -13,7 +13,7 @@ Working end-to-end on Coston2 + XRPL testnet, no mocks:
 - Funding = **one XRPL payment** (direct mint straight into the vault clone — the primary flow never needs an EVM wallet; there's also an optional MetaMask/OKX owner mode that auto-adds Coston2 for one-click check-ins)
 - Heartbeats = 1-drop payments, proven via `XRPPayment`; silence = **source-filtered** `ReferencedPaymentNonexistence` chained ledger-by-ledger from `lastHeartbeatLedger + 1`
 - We demonstrated on-chain that an attacker copying the owner's exact heartbeat memo **cannot** block the silence proof (source root filtering), and that early claims are structurally impossible while the owner lives
-- Full lifecycle runs on the CURRENT v4 contracts: mint → heartbeat → staticCall early-claim drill (blocked, `SilenceNotProven`) → source-filtered silence proof → challenge + 180s veto-proof grace → FULL-balance redemption `#39635850` → **beneficiary received 10.03 XRP, vault reconciled to zero** (case: heirloom.axiqo.xyz/case/001)
+- Full lifecycle runs on the CURRENT v4 contracts: mint → heartbeat → staticCall early-claim drill (blocked, `SilenceNotProven`) → source-filtered silence proof → challenge + 180s veto-proof grace → FULL-balance redemption `#39635850` → **beneficiary received 10.025312 XRP (exact to the drop), vault reconciled to zero** (case: heirloom.axiqo.xyz/case/001)
 
 60-second audit path (no wallet needed) — one real completed lifecycle, seven chapters, dual-ledger
 transaction rail, and a payout receipt whose integrity checks are generated from chain data:

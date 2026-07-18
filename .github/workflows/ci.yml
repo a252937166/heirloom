@@ -25,6 +25,20 @@ jobs:
         working-directory: contracts
       - run: npx hardhat test
         working-directory: contracts
+  keeper-and-case:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: syntax-check keeper + spike scripts
+        run: |
+          node --check keeper/server.mjs
+          node --check spike/build-case.mjs
+          node --check spike/fdc-lib.mjs
+          node --check spike/validate-case.mjs
+      - name: validate the shipped case manifest
+        run: node spike/validate-case.mjs
   secrets-guard:
     runs-on: ubuntu-latest
     steps:
