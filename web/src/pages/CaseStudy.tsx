@@ -308,14 +308,14 @@ export function CaseStudy() {
 
       {/* ── the seven-chapter player ───────────────────────────────────── */}
       <section id="story" style={{ padding: "26px 0" }} ref={playerRef}>
-        <div className="card" style={{ padding: 0, overflow: "hidden", borderColor: ch.ember ? "color-mix(in srgb, var(--ember) 35%, transparent)" : undefined }}>
-          <div className="two-col" style={{ display: "grid", gridTemplateColumns: "290px 1fr" }}>
-            <div style={{ padding: "32px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, borderRight: "1px solid var(--line)" }}>
-              <PulseDial size={210} lastAliveTs={now - Math.floor(3600 * ch.dial.frac)} deadlineTs={now + Math.ceil(3600 * (1 - ch.dial.frac))}
+        {/* stage, not a box: the dial and the chapter sit directly on the page */}
+        <div className="two-col" style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 40, alignItems: "start" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, paddingTop: 6 }}>
+              <PulseDial size={218} lastAliveTs={now - Math.floor(3600 * ch.dial.frac)} deadlineTs={now + Math.ceil(3600 * (1 - ch.dial.frac))}
                 state={ch.dial.state} label={ch.dial.label} />
               <span className="mono" style={{ fontSize: "0.66rem", color: "var(--mist-2)" }}>chapter {ch.n} of 7</span>
             </div>
-            <div style={{ padding: "26px 30px" }}>
+            <div style={{ minWidth: 0 }}>
               <div style={{ marginBottom: 18 }}>
                 <NodeStepper size={34} items={CHAPTERS.map((c, i) => ({
                   icon: CHAPTER_ICON[c.id],
@@ -361,7 +361,6 @@ export function CaseStudy() {
                 <button className="btn btn-ghost" style={{ padding: "7px 14px", fontSize: "0.8rem" }} onClick={() => go(idx + 1)}>Next →</button>
               </div>
             </div>
-          </div>
         </div>
       </section>
 
