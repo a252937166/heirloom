@@ -173,3 +173,17 @@ input::placeholder { color: var(--mist-2); font-family: var(--font-body); }
   .kit-sheet { color: #111; }
   .kit-sheet .mono { color: #111; }
 }
+
+/* live-progress + menus */
+@keyframes hl-spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--lamplight) 25%, transparent);
+  border-top-color: var(--lamplight);
+  animation: hl-spin 0.8s linear infinite;
+  display: inline-block; flex-shrink: 0;
+}
+@keyframes hl-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+.pulse { animation: hl-pulse 1.6s ease-in-out infinite; }
+.menu-row { transition: background 0.12s; }
+.menu-row:hover { background: color-mix(in srgb, var(--lamplight) 8%, transparent); }

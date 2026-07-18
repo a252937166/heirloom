@@ -10,6 +10,7 @@ type Injected = Eip1193Provider & { isMetaMask?: boolean; isOkxWallet?: boolean 
 
 export interface WalletOption {
   id: string;
+  rdns: string; // stable across reloads (6963 rdns, or a legacy tag)
   name: string;
   icon: string | null; // data: URI from EIP-6963
   provider: Injected;
@@ -35,6 +36,7 @@ if (typeof window !== "undefined") {
     if (d?.info?.uuid && d.provider) {
       announced.set(d.info.rdns ?? d.info.uuid, {
         id: d.info.uuid,
+        rdns: d.info.rdns ?? d.info.uuid,
         name: d.info.name,
         icon: d.info.icon ?? null,
         provider: d.provider,
@@ -52,9 +54,9 @@ export function detectedWallets(): WalletOption[] {
   // legacy fallback for wallets that don't speak EIP-6963
   const w = window as unknown as { ethereum?: Injected; okxwallet?: { ethereum?: Injected } & Injected };
   const okx = w.okxwallet?.ethereum ?? w.okxwallet;
-  if (okx) return [{ id: "legacy-okx", name: "OKX Wallet", icon: null, provider: okx }];
+  if (okx) return [{ id: "legacy-okx", rdns: "legacy-okx", name: "OKX Wallet", icon: null, provider: okx }];
   if (w.ethereum) {
-    return [{ id: "legacy", name: w.ethereum.isOkxWallet ? "OKX Wallet" : w.ethereum.isMetaMask ? "MetaMask" : "Browser wallet", icon: null, provider: w.ethereum }];
+    return [{ id: "legacy", rdns: "legacy", name: w.ethereum.isOkxWallet ? "OKX Wallet" : w.ethereum.isMetaMask ? "MetaMask" : "Browser wallet", icon: null, provider: w.ethereum }];
   }
   return [];
 }
@@ -97,6 +99,30 @@ export async function connectWith(opt: WalletOption): Promise<EvmState> {
   const chainOk = await ensureCoston2(opt.provider);
   active = opt;
   return { available: true, kind: opt.name, icon: opt.icon, address: accounts?.[0] ?? null, chainOk };
+}
+
+/** Silent session restore after a page refresh: eth_accounts never prompts —
+ * it returns the authorized account or nothing. No popups on page load, ever. */
+export async function silentReconnect(rdns: string): Promise<EvmState | null> {
+  for (let i = 0; i < 5; i++) {
+    const opt = detectedWallets().find((w) => w.rdns === rdns);
+    if (opt) {
+      try {
+        const accounts = (await opt.provider.request({ method: "eth_accounts" })) as string[];
+        if (!accounts?.length) return null;
+        active = opt;
+        let chainOk = false;
+        try {
+          chainOk = parseInt((await opt.provider.request({ method: "eth_chainId" })) as string, 16) === CONFIG.chainId;
+        } catch { /* banner will offer the switch */ }
+        return { available: true, kind: opt.name, icon: opt.icon, address: accounts[0], chainOk };
+      } catch {
+        return null;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 250)); // 6963 announcements arrive async
+  }
+  return null;
 }
 
 /** Best-effort disconnect: revoke the site permission where supported, drop the active wallet. */
