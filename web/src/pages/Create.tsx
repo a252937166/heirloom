@@ -158,6 +158,17 @@ export function Create() {
             {isXrplAddr(draft.beneficiaryXrpl) && (
               <span className="hint mono">fingerprint: {draft.beneficiaryXrpl.slice(0, 6)} ···· {draft.beneficiaryXrpl.slice(-6)} — check it character by character; it cannot be changed after release.</span>
             )}
+            {!draft.beneficiaryXrpl && (
+              <span className="hint" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+                <button type="button" className="btn btn-ghost" style={{ padding: "4px 12px", fontSize: "0.74rem" }}
+                  onClick={() => set("beneficiaryXrpl", CONFIG.demoBeneficiary)}>
+                  Use the demo beneficiary
+                </button>
+                <span style={{ color: "var(--mist-2)", fontSize: "0.76rem" }}>
+                  just exploring? This is "Maya" from the live case — payouts to her wallet are publicly visible.
+                </span>
+              </span>
+            )}
           </div>
           <button className="btn btn-primary"
             disabled={(!isXrplAddr(owner) && !evmMode) || !isXrplAddr(draft.beneficiaryXrpl) || (isXrplAddr(owner) && owner === draft.beneficiaryXrpl)}

@@ -106,5 +106,10 @@ export async function vaultsOfOwner(ownerXrpl: string): Promise<string[]> {
   return await factory.vaultsOf(addrHash(ownerXrpl));
 }
 
+export async function c2Balance(addr: string): Promise<string> {
+  const b = await provider.getBalance(addr);
+  return (Number(b) / 1e18).toFixed(4);
+}
+
 export const fmtFxrp = (uba: bigint) => (Number(uba) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 2 });
 export const short = (s: string, n = 8) => (s.length > 2 * n ? `${s.slice(0, n)}…${s.slice(-4)}` : s);

@@ -7,10 +7,10 @@ import { Claim } from "./pages/Claim";
 import { Kit } from "./pages/Kit";
 import { CaseStudy } from "./pages/CaseStudy";
 import { WalletModal } from "./components/WalletModal";
-import { WalletState, connectWallet } from "./lib/gem";
-import { EVM_NONE, EvmState, WalletOption, connectWith, retrySwitch } from "./lib/evm";
+import { WalletState, connectWallet, xrpBalance } from "./lib/gem";
+import { EVM_NONE, EvmState, WalletOption, connectWith, disconnectEvm, retrySwitch } from "./lib/evm";
 import { CONFIG } from "./config";
-import { short, vaultsOfOwner } from "./lib/chain";
+import { c2Balance, short, vaultsOfOwner } from "./lib/chain";
 
 const WalletCtx = createContext<{
   wallet: WalletState;
@@ -37,7 +37,18 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [myPlans, setMyPlans] = useState<string[]>([]);
   const [plansOpen, setPlansOpen] = useState(false);
+  const [acctOpen, setAcctOpen] = useState(false);
+  const [acctBal, setAcctBal] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const loc = useLocation();
+
+  // account panel: balance is read from the chain itself, not trusted from the wallet
+  useEffect(() => {
+    if (!acctOpen) return;
+    setAcctBal(null);
+    if (evm.address) c2Balance(evm.address).then(setAcctBal).catch(() => setAcctBal(null));
+    else if (wallet.address) xrpBalance(wallet.address).then(setAcctBal).catch(() => setAcctBal(null));
+  }, [acctOpen, evm.address, wallet.address]);
 
   useEffect(() => {
     if (wallet.address) {
@@ -101,31 +112,54 @@ export default function App() {
     }
   };
 
+  const disconnect = () => {
+    setWallet((w) => ({ installed: w.installed, address: null, network: null }));
+    setEvm(EVM_NONE);
+    setMyPlans([]);
+    setAcctOpen(false);
+    void disconnectEvm();
+  };
+
   return (
     <WalletCtx.Provider value={{ wallet, evm, connect, openConnect: () => setModalOpen(true), connecting, notice }}>
       <header style={{ borderBottom: "1px solid var(--line)", position: "sticky", top: 0, background: "color-mix(in srgb, var(--ink) 88%, transparent)", backdropFilter: "blur(8px)", zIndex: 10 }} className="no-print">
-        <div className="wrap" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 62 }}>
-          <Link to="/" style={{ fontFamily: "var(--font-display)", fontSize: "1.25rem", color: "var(--paper)", textDecoration: "none" }}>
-            Heirloom<span style={{ color: "var(--lamplight)" }}>.</span>
-          </Link>
-          <nav style={{ display: "flex", gap: 18, alignItems: "center" }}>
-            {!loc.pathname.startsWith("/case") && (
-              <Link to="/case/001" style={{ color: "var(--mist)", fontSize: "0.9rem" }}>
-                Live case
-              </Link>
-            )}
-            {loc.pathname !== "/create" && (
-              <Link to="/create" style={{ color: "var(--mist)", fontSize: "0.9rem" }}>
-                Create a plan
-              </Link>
-            )}
+        <div className="wrap" style={{ display: "flex", alignItems: "center", gap: 26, height: 62 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <Link to="/" style={{ fontFamily: "var(--font-display)", fontSize: "1.25rem", color: "var(--paper)", textDecoration: "none" }}>
+              Heirloom<span style={{ color: "var(--lamplight)" }}>.</span>
+            </Link>
+            <span className="pill" style={{ fontSize: "0.55rem", letterSpacing: "0.12em", padding: "3px 8px", color: "var(--mist-2)" }}>TESTNET</span>
+          </span>
+          <nav style={{ display: "flex", gap: 20, alignItems: "stretch", alignSelf: "stretch", flex: 1, minWidth: 0 }}>
+            {[
+              { to: "/case/001", match: "/case", icon: "▶", label: "Live case" },
+              { to: "/create", match: "/create", icon: "＋", label: "Create a plan" },
+            ].map((n) => {
+              const active = loc.pathname.startsWith(n.match);
+              return (
+                <Link key={n.to} to={n.to} className="mono"
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 7, fontSize: "0.76rem", letterSpacing: "0.05em",
+                    color: active ? "var(--lamplight)" : "var(--mist)", textDecoration: "none",
+                    borderBottom: active ? "2px solid var(--lamplight)" : "2px solid transparent",
+                    marginBottom: -1, padding: "0 2px",
+                  }}>
+                  <span style={{ fontSize: "0.7rem", opacity: 0.9 }}>{n.icon}</span>{n.label}
+                </Link>
+              );
+            })}
             {(wallet.address || evm.address) && (
-              <span style={{ position: "relative" }}>
-                <button className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: "0.85rem" }} onClick={() => setPlansOpen((o) => !o)}>
-                  My plans{myPlans.length ? ` (${myPlans.length})` : ""}
+              <span style={{ position: "relative", display: "inline-flex", alignItems: "stretch" }}>
+                <button className="mono" onClick={() => setPlansOpen((o) => !o)}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 7, fontSize: "0.76rem", letterSpacing: "0.05em",
+                    color: plansOpen ? "var(--lamplight)" : "var(--mist)", background: "none", border: "none", cursor: "pointer",
+                    borderBottom: plansOpen ? "2px solid var(--lamplight)" : "2px solid transparent", marginBottom: -1, padding: "0 2px",
+                  }}>
+                  <span style={{ fontSize: "0.7rem", opacity: 0.9 }}>▦</span>My plans{myPlans.length ? ` (${myPlans.length})` : ""}
                 </button>
                 {plansOpen && (
-                  <div style={{ position: "absolute", right: 0, top: 46, background: "var(--ink-2)", border: "1px solid var(--line)", borderRadius: 12, padding: 10, minWidth: 240, zIndex: 30 }}>
+                  <div style={{ position: "absolute", right: 0, top: 54, background: "var(--ink-2)", border: "1px solid var(--line)", borderRadius: 12, padding: 10, minWidth: 240, zIndex: 30 }}>
                     {myPlans.length === 0 && <p style={{ fontSize: "0.8rem", padding: 6 }}>No plans yet — create your first.</p>}
                     {myPlans.map((p) => (
                       <Link key={p} to={`/vault/${p}`} onClick={() => setPlansOpen(false)}
@@ -137,23 +171,75 @@ export default function App() {
                 )}
               </span>
             )}
-            {wallet.address ? (
-              <span className="pill gold" title={wallet.address}>
-                ● {short(wallet.address, 6)} · GemWallet
-              </span>
-            ) : evm.address ? (
-              <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span className="pill gold" title={evm.address} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  {evm.icon ? <img src={evm.icon} alt="" style={{ width: 14, height: 14, borderRadius: 4 }} /> : <span>●</span>}
-                  {short(evm.address, 6)} · {evm.kind}
-                </span>
-                {evm.chainOk ? (
-                  <span className="pill" style={{ color: "var(--verdant)", fontSize: "0.68rem" }}>Coston2</span>
-                ) : (
-                  <button className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: "0.72rem", color: "var(--ember)", borderColor: "color-mix(in srgb, var(--ember) 45%, transparent)" }}
-                    onClick={retryNetwork} disabled={connecting}>
-                    {connecting ? "Switching…" : "Switch to Coston2"}
-                  </button>
+            <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+              <a className="btn btn-ghost" href={CONFIG.github} target="_blank" rel="noreferrer"
+                style={{ padding: "6px 12px", fontSize: "0.72rem" }} title="Source code & threat model">
+                GitHub ↗
+              </a>
+              <a className="btn btn-ghost" href={CONFIG.faucet} target="_blank" rel="noreferrer"
+                style={{ padding: "6px 12px", fontSize: "0.72rem" }} title="Free Coston2 test gas">
+                Faucet ↗
+              </a>
+            {wallet.address || evm.address ? (
+              <span style={{ position: "relative" }}>
+                <button className="pill gold" title={wallet.address ?? evm.address ?? ""} onClick={() => setAcctOpen((o) => !o)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer", background: "none" }}>
+                  {evm.address && evm.icon ? <img src={evm.icon} alt="" style={{ width: 14, height: 14, borderRadius: 4 }} /> : <span>●</span>}
+                  {short((wallet.address ?? evm.address) as string, 6)} · {wallet.address ? "GemWallet" : evm.kind}
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: wallet.address || evm.chainOk ? "var(--verdant)" : "var(--ember)" }} />
+                  <span style={{ fontSize: "0.6rem", color: "var(--mist-2)" }}>▾</span>
+                </button>
+                {acctOpen && (
+                  <div style={{ position: "absolute", right: 0, top: 46, background: "var(--ink-2)", border: "1px solid var(--line)", borderRadius: 14, padding: 16, width: 284, zIndex: 30, boxShadow: "0 18px 60px rgba(0,0,0,.45)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                      <span style={{ width: 32, height: 32, borderRadius: 9, display: "grid", placeItems: "center", background: "var(--ink)", border: "1px solid var(--line)", overflow: "hidden", flexShrink: 0 }}>
+                        {evm.address && evm.icon
+                          ? <img src={evm.icon} alt="" style={{ width: 20, height: 20 }} />
+                          : <span style={{ color: "var(--verdant)", fontWeight: 700, fontFamily: "var(--font-display)" }}>{wallet.address ? "G" : "●"}</span>}
+                      </span>
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: "block", fontSize: "0.88rem", color: "var(--paper)", fontWeight: 500 }}>{wallet.address ? "GemWallet" : evm.kind}</span>
+                        <span className="mono" style={{ fontSize: "0.66rem", color: "var(--mist-2)" }}>{short((wallet.address ?? evm.address) as string, 10)}</span>
+                      </span>
+                      <button className="mono"
+                        onClick={() => { navigator.clipboard?.writeText((wallet.address ?? evm.address) as string); setCopied(true); setTimeout(() => setCopied(false), 1200); }}
+                        style={{ marginLeft: "auto", background: "none", border: "1px solid var(--line)", borderRadius: 6, color: copied ? "var(--verdant)" : "var(--mist-2)", fontSize: "0.62rem", padding: "3px 8px", cursor: "pointer" }}>
+                        {copied ? "copied" : "copy"}
+                      </button>
+                    </div>
+                    <div style={{ display: "grid", gap: 9, fontSize: "0.8rem", borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ color: "var(--mist-2)" }}>Network</span>
+                        {wallet.address ? (
+                          <span style={{ color: "var(--verdant)" }}>● XRPL {wallet.network ?? "Testnet"}</span>
+                        ) : evm.chainOk ? (
+                          <span style={{ color: "var(--verdant)" }}>● Flare Coston2</span>
+                        ) : (
+                          <button className="btn btn-ghost" style={{ padding: "3px 9px", fontSize: "0.7rem", color: "var(--ember)", borderColor: "color-mix(in srgb, var(--ember) 45%, transparent)" }}
+                            onClick={retryNetwork} disabled={connecting}>
+                            {connecting ? "Switching…" : "Wrong network — switch"}
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                        <span style={{ color: "var(--mist-2)" }}>Balance</span>
+                        <span className="mono" style={{ color: "var(--paper)" }}>
+                          {acctBal ?? "…"} {wallet.address ? "XRP" : "C2FLR"}
+                          {!wallet.address && acctBal !== null && Number(acctBal) === 0 && (
+                            <> · <a href="https://faucet.flare.network/coston2" target="_blank" rel="noreferrer" style={{ fontSize: "0.7rem" }}>faucet ↗</a></>
+                          )}
+                        </span>
+                      </div>
+                      <a className="mono" style={{ fontSize: "0.72rem" }} target="_blank" rel="noreferrer"
+                        href={wallet.address ? `${CONFIG.xrplExplorer}/accounts/${wallet.address}` : `${CONFIG.explorer}/address/${evm.address}`}>
+                        View on explorer ↗
+                      </a>
+                    </div>
+                    <button className="btn btn-ghost" onClick={disconnect}
+                      style={{ width: "100%", marginTop: 14, padding: "8px 0", fontSize: "0.8rem", color: "var(--ember)", borderColor: "color-mix(in srgb, var(--ember) 40%, transparent)" }}>
+                      Disconnect
+                    </button>
+                  </div>
                 )}
               </span>
             ) : (
@@ -161,6 +247,7 @@ export default function App() {
                 {connecting ? "Connecting…" : "Connect wallet"}
               </button>
             )}
+            </span>
           </nav>
         </div>
         {evm.address && !evm.chainOk && (

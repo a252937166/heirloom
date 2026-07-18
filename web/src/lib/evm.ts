@@ -99,6 +99,15 @@ export async function connectWith(opt: WalletOption): Promise<EvmState> {
   return { available: true, kind: opt.name, icon: opt.icon, address: accounts?.[0] ?? null, chainOk };
 }
 
+/** Best-effort disconnect: revoke the site permission where supported, drop the active wallet. */
+export async function disconnectEvm(): Promise<void> {
+  const p = active?.provider;
+  active = null;
+  try {
+    await p?.request({ method: "wallet_revokePermissions", params: [{ eth_accounts: {} }] });
+  } catch { /* not all wallets support revocation — clearing app state is the contract */ }
+}
+
 /** Re-attempt the network switch on the active wallet (wrong-network banner action). */
 export async function retrySwitch(): Promise<boolean> {
   if (!active) return false;
