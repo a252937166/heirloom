@@ -418,14 +418,17 @@ async function fundingScan() {
       const known = store.vaults[key];
       if (!known) continue; // not one of our vaults
       const hash = tx.hash ?? t.hash;
-      const seen = (known.meta.seenFunding ??= []);
-      if (seen.includes(hash)) continue;
-      seen.push(hash); persist();
+      // self-healing: a timed-out proof must NOT strand the vault — retry with
+      // a cooldown until the vault leaves PendingFunding (success ends it)
+      const attempts = (known.meta.fundAttempts ??= {});
+      const a = attempts[hash] ?? { n: 0, at: 0 };
+      if (a.n >= 5 || Date.now() - a.at < 60_000) continue;
       const v = vaultAt(recipient);
       if (Number(await v.state()) !== 1) continue; // only PendingFunding vaults
       if (!jobs.get(key)) {
+        attempts[hash] = { n: a.n + 1, at: Date.now() }; persist();
         runJob(recipient, "funding-auto", async () => {
-          rec(recipient, "funding", "Funding payment detected on the core vault — proving it to Flare (FDC XRPPayment)", { txXrpl: hash });
+          rec(recipient, "funding", `Funding payment detected on the core vault — proving it to Flare (FDC XRPPayment)${a.n ? ` · retry ${a.n + 1}/5` : ""}`, { txXrpl: hash });
           let bal = await fxrp.balanceOf(recipient);
           if (bal === 0n) {
             try {
