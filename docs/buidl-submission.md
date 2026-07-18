@@ -45,25 +45,30 @@ Heirloom is the non-custodial answer, and it is only possible on Flare:
 
 **2. The beneficiary cannot come early.** While the owner lives, the proof is unproducible (`INVALID: REFERENCED TRANSACTION EXISTS`); the claim window must chain exactly from `lastHeartbeatLedger + 1`; and after real silence a challenge window still lets one heartbeat veto everything. An early release attempt was rejected on-chain with `ChallengeNotOver`.
 
-## Fully proven on real infrastructure — twice, no mocks
+## Proven on real infrastructure — the canonical case runs on the CURRENT contracts
 
-Local lifecycle (vault `0x22d820…8826`) and the **production stack** (live keeper at heirloom.axiqo.xyz, vault `0x5655…BaEB`) each ran the whole story end-to-end:
+**Case #001 (contract v4, fully reconciled)** — live at https://heirloom.axiqo.xyz/case/001, manifest
+generated from chain + XRPL data by `spike/build-case.mjs`:
 
 | step | evidence |
 |---|---|
-| Fund with one XRPL payment | 32-byte recipient memo → `executeDirectMinting` → **Case #001 (contract v4): 10.07569 FXRP protected → FULL-balance redemption #39635850 → 10.03 XRP delivered · final balance 0 · SETTLED - FULLY RECONCILED** minted straight into the vault clone |
-| Heartbeat | XRPL tx attested (rounds 1398606 / 1398650) → `recordHeartbeat` |
-| Silence | source-filtered RPN chained from heartbeat ledger + 1 (rounds 1398610 / on-chain `0x6f89bcd7…`) |
-| Claim → challenge → release | `ClaimStarted` → `ChallengeNotOver` enforced → `executeRelease` |
-| **Real XRP delivered** | beneficiary's own XRPL wallet received **9.95 XRP** — twice (`7452922B…` and `F1B2764C…`) |
+| Fund with **one XRPL payment** | direct-minted **10.07569 FXRP** into the vault |
+| Heartbeat (1 drop + reference memo) | FDC-attested, `recordHeartbeat` on-chain |
+| **Early-claim drill** | blocked on-chain via `staticCall` — `SilenceNotProven`, funds moved 0 (recorded in the journal) |
+| Silence proven | source-filtered `ReferencedPaymentNonexistence`, chained from the heartbeat ledger + 1 |
+| Challenge + veto-proof grace | release waited out the challenge **and** the 180s proof buffer — the XRPL timestamp decides a veto, never transaction ordering |
+| **Full-balance redemption** | request `#39635850` for the entire 10.07569 FXRP, decoded from the release receipt |
+| **Real XRP delivered** | beneficiary's own wallet received **10.03 XRP** — settlement memo equals the redemption `paymentReference`, byte for byte |
+| **Reconciled to zero** | final vault balance **0 FXRP** — `SETTLED · FULLY RECONCILED`, five integrity checks pass |
 
-Rolling checkpoints for production-scale periods are implemented and chain-tested (attestation history depth measured at ~14 days; segments chain with `next.minimal == prev.firstOverflow`).
+Earlier full runs (v1 lot-redemption era; v2 residual case) are kept in the README as provenance — each gap
+drove the next contract revision.
 
 ## Architecture
 
 In the flagship XRP-native mode, the EVM side has **no privileged user key**. Every state change is authorized by an XRPL event proven by FDC, or a public timeout; every keeper action is a permissionless crank anyone could submit from public data (we watched a third-party executor beat our own keeper to a mint — the vault didn't care).
 
-Contracts: `HeirloomVault` (7-state machine, dual-proof validation, challenge veto, XRPL-signed cancel, EVM-owner mode with consensus-time silence) + `HeirloomFactory` (EIP-1167 clone per plan). Factory (v3): `0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2` (Coston2). 15 unit tests incl. adversarial + EVM-owner suites.
+Contracts: `HeirloomVault` (7-state machine, dual-proof validation, challenge veto, XRPL-signed cancel, EVM-owner mode with consensus-time silence) + `HeirloomFactory` (EIP-1167 clone per plan). Factory (v4, source-verified): `0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f` (Coston2). 19 unit tests incl. adversarial, veto-race and partial-redemption suites.
 
 App: the **Live Case Dashboard** (`/case/001`) replays one real completed lifecycle in seven chapters — dual-ledger transaction rail, two attack drills, and a reconciled payout receipt whose five integrity checks are generated from chain data by `spike/build-case.mjs`, plus a 90-second guided tour. Create a plan in 60 seconds (GemWallet first; MetaMask/OKX auto-adds Coston2 for one-click check-ins; or any XRPL wallet via copyable instructions), a living Pulse Dial, an evidence timeline where every entry links to a public transaction, and a printable **Recovery Kit** so the beneficiary can claim without our help.
 
@@ -84,7 +89,7 @@ Mainnet with 90–180-day periods and 7-day rolling checkpoints · lost-key self
 
 - Live case（60 秒无钱包审计线路）: https://heirloom.axiqo.xyz/case/001
 - Live: https://heirloom.axiqo.xyz （创建自己的金库全程真实交易；GemWallet 优先，MetaMask/OKX 自动加 Coston2）
-- Factory explorer (v3): https://coston2-explorer.flare.network/address/0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2
+- Factory explorer (v4): https://coston2-explorer.flare.network/address/0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f
 - 两次完整生命周期的关键 tx 全在 README 表格（含 XRPL payout 双证）
 
 ## Team / Contact

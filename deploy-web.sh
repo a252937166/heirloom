@@ -10,6 +10,7 @@ scp -qr dist/assets "$HOST:$DOCROOT/assets.new"
 scp -q dist/*.svg "$HOST:$DOCROOT/" 2>/dev/null || true
 ssh "$HOST" "cp -r $DOCROOT/assets.new/. $DOCROOT/assets/ 2>/dev/null || mv $DOCROOT/assets.new $DOCROOT/assets; rm -rf $DOCROOT/assets.new"
 scp -q dist/index.html "$HOST:$DOCROOT/index.html"   # the switch — old bundle stays valid until this lands
+git -C .. rev-parse --short HEAD | ssh "$HOST" "cat > /opt/heirloom/BUILD_SHA"
 ssh "$HOST" "cd $DOCROOT/assets && ls -t index-*.js 2>/dev/null | tail -n +6 | xargs -r rm -f"  # keep last 5 bundles
 REF=$(grep -oE '/assets/index-[^"]+\.js' web/../web/dist/index.html 2>/dev/null || grep -oE '/assets/index-[^"]+\.js' dist/index.html)
 L=$(stat -f%z "dist$REF" 2>/dev/null || stat -c%s "dist$REF")
