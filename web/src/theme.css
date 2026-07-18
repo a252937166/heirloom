@@ -237,3 +237,82 @@ input::placeholder { color: var(--mist-2); font-family: var(--font-body); }
   .spinner, .pulse, .pulse-ping, .ecg { animation: none; }
   html { scroll-behavior: auto; }
 }
+
+/* ================= motion layer ================= */
+
+/* ambient background: slow aurora blobs + faint grid, fixed behind everything */
+.bg-ambient { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.bg-ambient::before {
+  content: ""; position: absolute; inset: -20%;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 44px 44px;
+  opacity: 0.14;
+  mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 0%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 0%, transparent 70%);
+}
+.blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.22; will-change: transform; }
+.blob.b1 { width: 560px; height: 560px; background: var(--lamplight); top: -180px; left: 8%; animation: drift1 26s ease-in-out infinite; }
+.blob.b2 { width: 480px; height: 480px; background: var(--violet); top: -120px; right: 4%; animation: drift2 32s ease-in-out infinite; }
+.blob.b3 { width: 380px; height: 380px; background: var(--verdant); bottom: -220px; left: 42%; opacity: 0.1; animation: drift3 38s ease-in-out infinite; }
+@keyframes drift1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(60px,40px) scale(1.12); } }
+@keyframes drift2 { 0%,100% { transform: translate(0,0) scale(1.05); } 50% { transform: translate(-70px,30px) scale(0.94); } }
+@keyframes drift3 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(40px,-30px); } }
+
+/* page + section entrances */
+.page-enter { animation: page-in 0.35s ease both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.rise { opacity: 0; animation: rise-in 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+
+/* interactive surfaces */
+.card, .metric, .stat { transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease; }
+.card:hover, .metric:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--lamplight) 30%, var(--line));
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.35), 0 0 0 1px color-mix(in srgb, var(--lamplight) 10%, transparent);
+}
+.btn-primary { position: relative; overflow: hidden; }
+.btn-primary::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 46%;
+  left: -60%; transform: skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  animation: shine 3.6s ease-in-out infinite;
+}
+@keyframes shine { 0%, 62% { left: -60%; } 88%, 100% { left: 130%; } }
+.btn:active { transform: translateY(0) scale(0.985); }
+
+/* node stepper life */
+.node-active { animation: node-breathe 2.2s ease-in-out infinite; }
+@keyframes node-breathe {
+  0%, 100% { box-shadow: 0 0 14px color-mix(in srgb, var(--lamplight) 35%, transparent); }
+  50% { box-shadow: 0 0 26px color-mix(in srgb, var(--lamplight) 60%, transparent); }
+}
+.node-flow {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--verdant) 60%, transparent), transparent) !important;
+  background-size: 200% 100% !important;
+  animation: flow 2.8s linear infinite;
+}
+@keyframes flow { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* success celebration */
+.pop-in { animation: pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+@keyframes pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.confetti { animation: confetti-fall 2.8s ease-in infinite; }
+@keyframes confetti-fall {
+  0% { transform: translateY(-30px) rotate(0deg); opacity: 0; }
+  12% { opacity: 0.75; }
+  100% { transform: translateY(190px) rotate(300deg); opacity: 0; }
+}
+
+/* chapter drawer transition */
+.chapter-in { animation: chapter-slide 0.32s ease both; }
+@keyframes chapter-slide { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+
+/* dial arc tip glow */
+.dial-tip { filter: drop-shadow(0 0 6px currentColor); }
+
+@media (prefers-reduced-motion: reduce) {
+  .blob, .btn-primary::after, .node-active, .node-flow, .confetti { animation: none !important; }
+  .rise, .page-enter, .pop-in, .chapter-in { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .card:hover, .metric:hover { transform: none; }
+}
