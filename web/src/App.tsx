@@ -186,7 +186,7 @@ export default function App() {
       <div className="bg-ambient" aria-hidden="true">
         <span className="blob b1" /><span className="blob b2" /><span className="blob b3" />
       </div>
-      <header style={{ borderBottom: "1px solid var(--line)", position: "sticky", top: 0, background: "color-mix(in srgb, var(--ink) 88%, transparent)", backdropFilter: "blur(8px)", zIndex: 10 }} className="no-print">
+      <header className="site-header no-print">
         <div className="wrap" style={{ display: "flex", alignItems: "center", gap: 26, height: 62 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <Link to="/" style={{ display: "inline-flex", alignItems: "center" }} aria-label="Heirloom home">
