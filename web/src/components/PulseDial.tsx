@@ -91,6 +91,12 @@ export function PulseDial({
         {/* alive ping */}
         {alive && <circle className="pulse-ping" cx={cx} cy={cx} r={r - 16} fill="none" stroke="var(--verdant)" strokeWidth={1.2} />}
         {challenge && <circle className="pulse-ping" cx={cx} cy={cx} r={r - 16} fill="none" stroke="var(--ember)" strokeWidth={1.4} />}
+        {/* glowing tip at the end of the progress arc */}
+        {!settled && state < 4 && frac > eps && (() => {
+          const a = 2 * Math.PI * frac - Math.PI / 2;
+          return <circle className="dial-tip" cx={cx + r * Math.cos(a)} cy={cx + r * Math.sin(a)} r={W / 2 + 1}
+            fill={challenge || frac > AMBER_AT ? "#ffb03c" : "#6fe89a"} style={{ color: challenge || frac > AMBER_AT ? "#ffb03c" : "#6fe89a" }} />;
+        })()}
         {/* heartbeat wave through the center */}
         <polyline
           className="ecg"
@@ -100,7 +106,7 @@ export function PulseDial({
         />
       </svg>
       <div className="dial-center">
-        <div className="big">{state >= 4 ? (settled ? "✓" : "—") : fmt(remaining)}</div>
+        <div className={settled ? "big pop-in" : "big"} style={settled ? { color: "var(--verdant)" } : undefined}>{state >= 4 ? (settled ? "✓" : "—") : fmt(remaining)}</div>
         <div className="small">{label ?? (challenge ? "challenge window" : "until silence deadline")}</div>
       </div>
     </div>

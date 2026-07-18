@@ -324,6 +324,7 @@ export function CaseStudy() {
                   onClick: () => go(i),
                 }))} />
               </div>
+              <div key={ch.id} className="chapter-in">
               <h3 style={{ fontFamily: "var(--font-display)", fontSize: "1.45rem", marginBottom: 10 }}>
                 <span style={{ color: accent }}>{ch.n}</span> — {ch.title}
               </h3>
@@ -353,6 +354,7 @@ export function CaseStudy() {
                 <summary style={{ cursor: "pointer", color: "var(--mist-2)", fontSize: "0.74rem" }}>Raw technical details</summary>
                 <p className="mono" style={{ fontSize: "0.7rem", color: "var(--mist)", marginTop: 8, lineHeight: 1.6 }}>{ch.raw}</p>
               </details>
+              </div>
 
               <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
                 <button className="btn btn-ghost" style={{ padding: "7px 14px", fontSize: "0.8rem" }} onClick={() => go(idx - 1)}>← Back</button>

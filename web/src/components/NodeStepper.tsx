@@ -26,7 +26,7 @@ export function NodeStepper({ items, size = 40 }: { items: NodeItem[]; size?: nu
           <div key={i} style={{ display: "flex", alignItems: "flex-start", flex: i < items.length - 1 ? "1 1 0" : "0 0 auto", minWidth: 0 }}>
             <Tag onClick={it.onClick} aria-current={st === "active" ? "step" : undefined}
               style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, cursor: it.onClick ? "pointer" : "default", minWidth: size + 16, background: "none", border: "none", padding: 0, font: "inherit", color: "inherit" }}>
-              <span style={{
+              <span className={st === "active" ? "node-active" : undefined} style={{
                 width: size, height: size, borderRadius: "50%", display: "grid", placeItems: "center",
                 fontSize: size * 0.38, fontWeight: 700, color: c,
                 border: `1.6px solid ${c}`,
@@ -42,7 +42,8 @@ export function NodeStepper({ items, size = 40 }: { items: NodeItem[]; size?: nu
               </span>
             </Tag>
             {i < items.length - 1 && (
-              <span style={{ flex: 1, height: 1.6, minWidth: 14, background: `linear-gradient(90deg, ${c}55, var(--line))`, marginTop: size / 2 }} />
+              <span className={st === "done" ? "node-flow" : undefined}
+                style={{ flex: 1, height: 1.6, minWidth: 14, background: `linear-gradient(90deg, ${c}55, var(--line))`, marginTop: size / 2 }} />
             )}
           </div>
         );

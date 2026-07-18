@@ -219,10 +219,10 @@ export function Claim() {
 
           {v.state === 5 && (receipt?.settlements.length || settled.length) ? (
             <div className="card" style={{ textAlign: "center", borderColor: "color-mix(in srgb, var(--verdant) 40%, transparent)", marginBottom: 18, position: "relative", overflow: "hidden" }}>
-              {["12%", "28%", "46%", "64%", "82%"].map((left, i) => (
-                <span key={i} style={{ position: "absolute", top: `${12 + (i % 3) * 22}%`, left, width: 5, height: 9, borderRadius: 2, transform: `rotate(${i * 37}deg)`, background: ["var(--verdant)", "var(--lamplight)", "var(--violet)", "var(--ember)", "var(--verdant)"][i], opacity: 0.55 }} />
+              {["8%", "22%", "38%", "55%", "70%", "85%", "14%", "62%"].map((left, i) => (
+                <span key={i} className="confetti" style={{ position: "absolute", top: -12, left, width: 5, height: 9, borderRadius: 2, background: ["var(--verdant)", "var(--lamplight)", "var(--violet)", "var(--ember)"][i % 4], animationDelay: `${i * 0.35}s`, animationDuration: `${2.4 + (i % 3) * 0.5}s` }} />
               ))}
-              <span style={{ display: "inline-grid", placeItems: "center", width: 74, height: 74, borderRadius: "50%", background: "color-mix(in srgb, var(--verdant) 16%, transparent)", border: "2px solid var(--verdant)", color: "var(--verdant)", fontSize: "2rem", fontWeight: 700, margin: "6px 0 12px" }}>✓</span>
+              <span className="pop-in" style={{ display: "inline-grid", placeItems: "center", width: 74, height: 74, borderRadius: "50%", background: "color-mix(in srgb, var(--verdant) 16%, transparent)", border: "2px solid var(--verdant)", color: "var(--verdant)", fontSize: "2rem", fontWeight: 700, margin: "6px 0 12px", boxShadow: "0 0 40px color-mix(in srgb, var(--verdant) 35%, transparent)" }}>✓</span>
               <h2 style={{ marginBottom: 4 }}>XRP delivered!</h2>
               <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "2.6rem", color: "var(--paper)", letterSpacing: "-0.02em" }}>
                 {receipt?.settlements.length

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { CONFIG } from "../config";
 import { FlareMark } from "../components/FlareMark";
@@ -26,6 +26,28 @@ function useLiveStats() {
   return stats;
 }
 
+// numbers count up on first paint (skipped under prefers-reduced-motion)
+function Count({ text }: { text: string }) {
+  const n = parseFloat(text);
+  const [v, setV] = useState<number | null>(Number.isNaN(n) ? null : 0);
+  const raf = useRef(0);
+  useEffect(() => {
+    if (Number.isNaN(n)) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setV(n); return; }
+    const t0 = performance.now(), dur = 750;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / dur);
+      setV(n * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) raf.current = requestAnimationFrame(tick);
+    };
+    raf.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf.current);
+  }, [n]);
+  if (v === null) return <>{text}</>;
+  const dec = (text.split(".")[1]?.match(/^\d+/)?.[0] ?? "").length;
+  return <>{v.toFixed(dec)}{text.replace(/^[\d.,]+/, "")}</>;
+}
+
 function MiniStatus({ dot, title, sub, dashed }: { dot: string; title: string; sub: string; dashed?: boolean }) {
   return (
     <div style={{
@@ -46,7 +68,7 @@ export function Landing() {
   return (
     <main>
       {/* 1 · hero — copy left, living dial with status cards right */}
-      <section className="wrap hero-grid" style={{ padding: "58px 24px 40px", display: "grid", gridTemplateColumns: "1.05fr 1fr", gap: 36, alignItems: "center" }}>
+      <section className="wrap hero-grid rise" style={{ padding: "58px 24px 40px", display: "grid", gridTemplateColumns: "1.05fr 1fr", gap: 36, alignItems: "center" }}>
         <div>
           <span className="pill" style={{ marginBottom: 18 }}>◈ TESTNET · built on <FlareMark size={12} /></span>
           <h1 style={{ margin: "14px 0 16px" }}>
@@ -80,11 +102,11 @@ export function Landing() {
       </section>
 
       {/* 2 · metric cards */}
-      <section className="wrap" style={{ padding: "0 24px 30px" }}>
+      <section className="wrap rise" style={{ padding: "0 24px 30px", animationDelay: "0.08s" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-          <div className="metric"><span className="ic">▦</span><span><b>{stats.plans ?? "…"}</b><span className="lbl">Plans created</span></span></div>
-          <div className="metric"><span className="ic green">◈</span><span><b>{stats.protectedXrp ?? "…"} FXRP</b><span className="lbl">Protected (sampled plans)</span></span></div>
-          <div className="metric"><span className="ic violet">⇄</span><span><b>{mcase.payoutXrp} XRP</b><span className="lbl">Delivered in Case #001</span></span></div>
+          <div className="metric"><span className="ic">▦</span><span><b>{stats.plans === null ? "…" : <Count text={String(stats.plans)} />}</b><span className="lbl">Plans created</span></span></div>
+          <div className="metric"><span className="ic green">◈</span><span><b>{stats.protectedXrp === null ? "…" : <Count text={`${stats.protectedXrp} FXRP`} />}</b><span className="lbl">Protected (sampled plans)</span></span></div>
+          <div className="metric"><span className="ic violet">⇄</span><span><b><Count text={`${mcase.payoutXrp} XRP`} /></b><span className="lbl">Delivered in Case #001</span></span></div>
           <div className="metric"><span className="ic orange">⛨</span><span><b>0</b><span className="lbl">Heirloom-held keys</span></span></div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 12 }}>
@@ -106,7 +128,7 @@ export function Landing() {
       </section>
 
       {/* 3 · the canonical case strip */}
-      <section className="wrap" style={{ padding: "14px 24px 40px" }}>
+      <section className="wrap rise" style={{ padding: "14px 24px 40px", animationDelay: "0.16s" }}>
         <div className="eyebrow" style={{ marginBottom: 12 }}>A real plan, settled</div>
         <div className="card" style={{ display: "grid", gridTemplateColumns: "215px 1fr", gap: 26, alignItems: "center" }}>
           <div style={{ borderRight: "1px solid var(--line)", paddingRight: 22 }}>
@@ -133,7 +155,7 @@ export function Landing() {
       </section>
 
       {/* 4 · two impossibilities + why Flare */}
-      <section className="wrap" style={{ padding: "10px 24px 40px" }}>
+      <section className="wrap rise" style={{ padding: "10px 24px 40px", animationDelay: "0.24s" }}>
         <div className="eyebrow" style={{ marginBottom: 12 }}>Two impossibilities, proven</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 0.9fr", gap: 14 }} className="two-col">
           <div className="card">
@@ -174,7 +196,7 @@ export function Landing() {
       </section>
 
       {/* 5 · CTA */}
-      <section className="wrap" style={{ padding: "10px 24px 30px" }}>
+      <section className="wrap rise" style={{ padding: "10px 24px 30px", animationDelay: "0.3s" }}>
         <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
           <div>
             <h2 style={{ marginBottom: 6 }}>Sixty seconds to a living plan.</h2>
