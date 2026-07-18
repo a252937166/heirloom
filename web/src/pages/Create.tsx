@@ -4,6 +4,7 @@ import { CONFIG } from "../config";
 import { useWallet } from "../App";
 import { payWithMemo } from "../lib/gem";
 import { short } from "../lib/chain";
+import { NodeStepper } from "../components/NodeStepper";
 import type { KeeperEvent } from "./Vault";
 
 type Draft = {
@@ -116,9 +117,12 @@ export function Create() {
     <main className="wrap" style={{ padding: "50px 24px", maxWidth: 720 }}>
       <div className="eyebrow">Create a continuity plan</div>
       <h1 style={{ fontSize: "2.1rem", margin: "10px 0 8px" }}>{titles[step]}</h1>
-      <p className="mono" style={{ fontSize: "0.72rem", marginBottom: 28 }}>
-        step {step + 1} of 6 · Coston2 testnet · demo timing
-      </p>
+      <div style={{ margin: "18px 0 26px", maxWidth: 640 }}>
+        <NodeStepper size={30} items={["Who", "When", "Veto", "Review", "Protect", "Share"].map((label, i) => ({
+          icon: String(i + 1), label,
+          state: i < step ? "done" : i === step ? "active" : "todo",
+        }))} />
+      </div>
 
       {err && <div className="notice err" style={{ marginBottom: 18 }}>{err}</div>}
 
@@ -161,22 +165,30 @@ export function Create() {
             <input placeholder={evmMode ? "r… (leave empty to check in from MetaMask/OKX)" : "r…"} value={draft.ownerXrpl || wallet.address || ""} onChange={(e) => set("ownerXrpl", e.target.value.trim())} />
           </div>
           <div className="field">
-            <label>Their XRPL address (the beneficiary)</label>
+            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <span>Their XRPL address (the beneficiary)</span>
+              {isXrplAddr(draft.beneficiaryXrpl) && <span className="mono" style={{ fontSize: "0.66rem", color: "var(--verdant)" }}>✓ valid</span>}
+            </label>
             <input placeholder="r…" value={draft.beneficiaryXrpl} onChange={(e) => set("beneficiaryXrpl", e.target.value.trim())} />
             {isXrplAddr(draft.beneficiaryXrpl) && (
               <span className="hint mono">fingerprint: {draft.beneficiaryXrpl.slice(0, 6)} ···· {draft.beneficiaryXrpl.slice(-6)} — check it character by character; it cannot be changed after release.</span>
             )}
-            {!draft.beneficiaryXrpl && (
-              <span className="hint" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
-                <button type="button" className="btn btn-ghost" style={{ padding: "4px 12px", fontSize: "0.74rem" }}
-                  onClick={() => set("beneficiaryXrpl", CONFIG.demoBeneficiary)}>
-                  Use the demo beneficiary
+            {!isXrplAddr(draft.beneficiaryXrpl) && (
+              <>
+                <span className="hint" style={{ marginTop: 8, fontSize: "0.72rem", color: "var(--mist-2)" }}>Or choose a demo beneficiary</span>
+                <button type="button" onClick={() => set("beneficiaryXrpl", CONFIG.demoBeneficiary)}
+                  style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", padding: "12px 14px", borderRadius: 12, cursor: "pointer", background: "color-mix(in srgb, var(--paper) 2%, transparent)", border: "1px dashed var(--line)" }}>
+                  <span style={{ width: 34, height: 34, borderRadius: "50%", display: "grid", placeItems: "center", background: "color-mix(in srgb, var(--violet) 18%, transparent)", color: "var(--violet)", fontWeight: 700, flexShrink: 0 }}>M</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "var(--paper)" }}>Maya (Demo)</span>
+                    <span className="mono" style={{ fontSize: "0.64rem", color: "var(--mist-2)" }}>{short(CONFIG.demoBeneficiary, 10)}</span>
+                  </span>
+                  <span className="mono" style={{ fontSize: "0.68rem", color: "var(--mist-2)" }}>use ›</span>
                 </button>
-                <span style={{ color: "var(--lamplight)", fontSize: "0.74rem" }}>
-                  Judge demo only — this is "Maya", a public test wallet: any payout is visible to everyone.
-                  Never use it for a personal plan.
+                <span className="hint" style={{ fontSize: "0.68rem", color: "var(--mist-2)" }}>
+                  Public test address · anyone can see funds sent here · judge demo only, never for a personal plan
                 </span>
-              </span>
+              </>
             )}
           </div>
           <button className="btn btn-primary"
@@ -238,40 +250,29 @@ export function Create() {
       )}
 
       {step === 3 && (
-        <div className="card" style={{ borderColor: "color-mix(in srgb, var(--lamplight) 45%, transparent)" }}>
-          <h3 style={{ marginBottom: 14 }}>The promise you are about to make</h3>
-          <div style={{ fontSize: "0.98rem", color: "var(--paper)", display: "grid", gap: 10, marginBottom: 18 }}>
-            <p style={{ color: "var(--paper)" }}>
-              · As long as you check in within <strong>{mins(draft.heartbeatPeriod)}</strong>
-              {evmMode ? ` (one click in ${evm.kind ?? "your wallet"})` : ""}, Heirloom cannot redirect or
-              release this vault, and the beneficiary cannot claim — the contract refuses early access.
-            </p>
-            <p style={{ color: "var(--paper)" }}>
-              · After {mins(draft.heartbeatPeriod)} plus {mins(draft.grace)} of grace,{" "}
-              <span className="mono">{short(draft.beneficiaryXrpl, 6)}</span> may ask Flare's network to prove
-              your silence.
-            </p>
-            <p style={{ color: "var(--paper)" }}>
-              · You then still have a final <strong>{mins(draft.challenge)}</strong> veto window — one heartbeat
-              cancels everything.
-            </p>
-            <p style={{ color: "var(--paper)" }}>
-              · Only after all three have elapsed can <strong>{draft.lots * 10} XRP</strong> be redeemed to
-              their wallet. You can cancel and take everything back at any time before that.
-            </p>
+        <div className="card">
+          <h3 style={{ marginBottom: 4, textAlign: "center" }}>Review your promise</h3>
+          <p style={{ fontSize: "0.82rem", textAlign: "center", marginBottom: 16 }}>Confirm everything looks right before protecting your XRP.</p>
+          <div className="kv" style={{ marginBottom: 16 }}>
+            <div className="kv-row"><span className="k">Beneficiary</span><span className="v">{short(draft.beneficiaryXrpl, 8)}</span></div>
+            <div className="kv-row"><span className="k">Heartbeat period</span><span className="v">{mins(draft.heartbeatPeriod)} (demo)</span></div>
+            <div className="kv-row"><span className="k">Grace period</span><span className="v">{mins(draft.grace)}</span></div>
+            <div className="kv-row"><span className="k">Final veto window</span><span className="v">{mins(draft.challenge)}</span></div>
+            <div className="kv-row"><span className="k">Protected amount</span><span className="v">{draft.lots * 10}.00 XRP (you send ≈ {(Math.ceil((draft.lots * 10 + 0.1 + 0.15) / 0.9975 * 100) / 100).toFixed(2)})</span></div>
+            <div className="kv-row"><span className="k">Owner ({evmMode ? evm.kind ?? "EVM" : "your wallet"})</span><span className="v">{evmMode ? short(evm.address ?? "", 8) : short(owner, 8)}</span></div>
           </div>
-          <div className="status-grid" style={{ marginBottom: 16 }}>
-            <div className="stat"><div className="k">You send (one XRPL payment)</div><div className="v">≈ {(Math.ceil((draft.lots * 10 + 0.1 + 0.15) / 0.9975 * 100) / 100).toFixed(2)} XRP</div></div>
-            <div className="stat"><div className="k">Protected after minting</div><div className="v">≈ {draft.lots * 10} FXRP</div></div>
+          <div className="notice" style={{ marginBottom: 10 }}>
+            ⓘ You keep control until silence is proven <em>and</em> the veto window ends. Heirloom cannot
+            redirect or release early; the beneficiary cannot claim early — the contract refuses.
           </div>
-          <p className="hint" style={{ fontSize: "0.74rem", color: "var(--mist-2)", marginBottom: 14 }}>
-            The difference covers the FAssets minting fee (~0.25%) and the executor fee. On release, the vault
-            redeems the maximum the protocol accepts; a residual below the protocol minimum stays visible on-chain.
+          <p className="hint" style={{ fontSize: "0.7rem", color: "var(--mist-2)", marginBottom: 16 }}>
+            The send/protect difference covers the FAssets minting + executor fees. On release the vault redeems
+            the protocol maximum; a residual below the protocol minimum stays visible on-chain.
           </p>
-          <div style={{ display: "flex", gap: 10 }}>
-            <button className="btn btn-ghost" onClick={() => setStep(2)}>Adjust</button>
+          <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
+            <button className="btn btn-ghost" onClick={() => setStep(2)}>← Back</button>
             <button className="btn btn-primary" disabled={busy} onClick={createVault}>
-              {busy ? "Creating your vault…" : "I understand — create the vault"}
+              {busy ? "Creating your vault…" : evmMode ? "Create the plan" : "Protect with XRPL"}
             </button>
           </div>
         </div>
@@ -310,45 +311,55 @@ export function Create() {
             )
           )}
 
-          {(paidTx || progress.length > 0) && (
-            <div style={{ marginTop: 16 }}>
-              {paidTx && (
-                <p className="mono" style={{ fontSize: "0.75rem", marginBottom: 10 }}>
-                  payment <a href={`${CONFIG.xrplExplorer}/transactions/${paidTx}`} target="_blank" rel="noreferrer">{short(paidTx, 10)} ↗</a>
-                </p>
-              )}
-              <div style={{ display: "grid", gap: 8 }}>
-                {progressSteps.map(([kind, label], i) => {
-                  const done = doneKinds.has(kind);
-                  const activeStep = !done && progressSteps.slice(0, i).every(([k]) => doneKinds.has(k));
-                  return (
-                    <div key={kind} style={{ display: "flex", gap: 10, alignItems: "center", fontSize: "0.88rem" }}>
-                      {done ? (
-                        <span className="mono" style={{ color: "var(--verdant)" }}>✓</span>
-                      ) : activeStep ? (
-                        <span className="spinner" />
-                      ) : (
-                        <span className="mono" style={{ color: "var(--mist-2)" }}>○</span>
-                      )}
-                      <span style={{ color: done ? "var(--paper)" : activeStep ? "var(--paper)" : "var(--mist-2)" }}>
-                        {label}{activeStep ? "…" : ""}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              {!isActive && (
-                <p className="mono pulse" style={{ fontSize: "0.68rem", color: "var(--mist-2)", marginTop: 10 }}>
-                  Flare's data providers are attesting — a voting round takes about 90 seconds, finalization
-                  2–3 minutes. This page updates itself.
-                </p>
-              )}
-              {isActive && (
-                <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setStep(5)}>
-                  The plan is live — one last thing
-                </button>
-              )}
-            </div>
+          {/* vertical activation progress (mock panel 4) */}
+          <div style={{ marginTop: 18, display: "grid", gap: 0 }}>
+            {(() => {
+              const paid = !!paidTx || doneKinds.size > 0;
+              const verifying = doneKinds.has("funding");
+              const minted = doneKinds.has("minted");
+              const steps = [
+                { t: "Waiting for XRPL payment", s: wallet.address ? "confirm it in GemWallet — one payment, exact amount + memo" : "send the exact amount with the memo below", done: paid, act: !paid },
+                { t: "Verifying payment on XRPL", s: "Flare's data providers attest the payment (≈ 90 s rounds)", done: minted, act: paid && verifying && !minted },
+                { t: "Minting FXRP on Flare", s: "executeDirectMinting — any executor may beat us to it; balance is the truth", done: minted, act: false },
+                { t: "Vault activated", s: "the dial goes live — your plan will be ready", done: isActive, act: minted && !isActive },
+              ];
+              return steps.map((st, i) => (
+                <div key={st.t} style={{ display: "grid", gridTemplateColumns: "30px 1fr", gap: 12, position: "relative", paddingBottom: i < steps.length - 1 ? 18 : 0 }}>
+                  {i < steps.length - 1 && <span style={{ position: "absolute", left: 14, top: 30, bottom: 0, width: 1.5, background: st.done ? "color-mix(in srgb, var(--verdant) 45%, transparent)" : "var(--line)" }} />}
+                  <span style={{
+                    width: 30, height: 30, borderRadius: "50%", display: "grid", placeItems: "center", zIndex: 1,
+                    fontSize: "0.78rem", fontWeight: 700,
+                    color: st.done ? "var(--verdant)" : st.act ? "var(--lamplight)" : "var(--mist-2)",
+                    border: `1.6px solid ${st.done ? "var(--verdant)" : st.act ? "var(--lamplight)" : "var(--line)"}`,
+                    background: st.done ? "color-mix(in srgb, var(--verdant) 12%, var(--ink))" : "var(--ink)",
+                  }}>
+                    {st.done ? "✓" : st.act ? <span className="spinner" style={{ width: 12, height: 12 }} /> : i + 1}
+                  </span>
+                  <span>
+                    <span style={{ display: "block", fontSize: "0.9rem", fontWeight: 600, color: st.done || st.act ? "var(--paper)" : "var(--mist-2)" }}>{st.t}</span>
+                    <span style={{ display: "block", fontSize: "0.74rem", color: "var(--mist-2)" }}>{st.s}</span>
+                  </span>
+                </div>
+              ));
+            })()}
+          </div>
+          {paidTx && (
+            <p className="mono" style={{ fontSize: "0.72rem", margin: "12px 0 0" }}>
+              payment <a href={`${CONFIG.xrplExplorer}/transactions/${paidTx}`} target="_blank" rel="noreferrer">{short(paidTx, 10)} ↗</a>
+            </p>
+          )}
+          <div style={{ marginTop: 16, border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", display: "flex", gap: 12, alignItems: "center", background: "#0d0e18" }}>
+            <span style={{ minWidth: 0, flex: 1 }}>
+              <span className="mono" style={{ display: "block", fontSize: "0.6rem", color: "var(--mist-2)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Memo — routes the mint to your vault</span>
+              <span className="mono" style={{ display: "block", fontSize: "0.72rem", color: "var(--paper)", wordBreak: "break-all", marginTop: 3 }}>{created.fundingMemo}</span>
+            </span>
+            <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: "0.72rem", flexShrink: 0 }}
+              onClick={() => navigator.clipboard?.writeText(created.fundingMemo)}>copy</button>
+          </div>
+          {isActive && (
+            <button className="btn btn-primary" style={{ marginTop: 16, width: "100%" }} onClick={() => setStep(5)}>
+              The plan is live — one last thing →
+            </button>
           )}
 
           <details style={{ marginTop: 16 }}>

@@ -4,6 +4,7 @@ import { CONFIG } from "../config";
 import { VaultView, addrHash, fmtFxrp, readVault, short } from "../lib/chain";
 import { EvidenceTimeline, KeeperEvent } from "./Vault";
 import { PulseDial } from "../components/PulseDial";
+import { NodeStepper } from "../components/NodeStepper";
 
 const STEPS = ["Confirm beneficiary address", "Prove the silence", "Final challenge", "Redemption", "XRP received"];
 
@@ -19,17 +20,15 @@ interface Receipt {
   settlements: { requestId: string; deliveredDrops: string; txXrpl: string; paymentReference: string }[];
 }
 
+const STEP_SHORT = ["Verify", "Proof", "Challenge", "Release", "Complete"];
 function Stepper({ active }: { active: number }) {
   return (
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "14px 0 20px" }}>
-      {STEPS.map((s, i) => (
-        <span key={s} className="pill" style={{
-          color: i < active ? "var(--verdant)" : i === active ? "var(--lamplight)" : "var(--mist-2)",
-          borderColor: i === active ? "color-mix(in srgb, var(--lamplight) 50%, transparent)" : "var(--line)",
-        }}>
-          {i < active ? "✓" : i + 1} · {s}
-        </span>
-      ))}
+    <div style={{ margin: "18px 0 22px", maxWidth: 600 }}>
+      <NodeStepper size={30} items={STEP_SHORT.map((label, i) => ({
+        icon: i < active ? undefined : String(i + 1),
+        label,
+        state: (i < active ? "done" : i === active ? "active" : "todo") as "done" | "active" | "todo",
+      }))} />
     </div>
   );
 }
@@ -210,6 +209,44 @@ export function Claim() {
             </div>
           )}
 
+          {v.state === 5 && (receipt?.settlements.length || settled.length) ? (
+            <div className="card" style={{ textAlign: "center", borderColor: "color-mix(in srgb, var(--verdant) 40%, transparent)", marginBottom: 18, position: "relative", overflow: "hidden" }}>
+              {["12%", "28%", "46%", "64%", "82%"].map((left, i) => (
+                <span key={i} style={{ position: "absolute", top: `${12 + (i % 3) * 22}%`, left, width: 5, height: 9, borderRadius: 2, transform: `rotate(${i * 37}deg)`, background: ["var(--verdant)", "var(--lamplight)", "var(--violet)", "var(--ember)", "var(--verdant)"][i], opacity: 0.55 }} />
+              ))}
+              <span style={{ display: "inline-grid", placeItems: "center", width: 74, height: 74, borderRadius: "50%", background: "color-mix(in srgb, var(--verdant) 16%, transparent)", border: "2px solid var(--verdant)", color: "var(--verdant)", fontSize: "2rem", fontWeight: 700, margin: "6px 0 12px" }}>✓</span>
+              <h2 style={{ marginBottom: 4 }}>XRP delivered!</h2>
+              <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "2.6rem", color: "var(--paper)", letterSpacing: "-0.02em" }}>
+                {receipt?.settlements.length
+                  ? receipt.settlements.map((s) => (Number(s.deliveredDrops) / 1e6).toFixed(2)).join(" + ")
+                  : settled.map((s) => s.label.match(/([\d.]+) XRP/)?.[1]).filter(Boolean).join(" + ")} XRP
+              </div>
+              <p style={{ fontSize: "0.85rem", marginTop: 4 }}>has been sent to the beneficiary's own wallet</p>
+              {(receipt?.settlements[0]?.txXrpl ?? settled[0]?.txXrpl) && (
+                <>
+                  <p className="mono" style={{ fontSize: "0.7rem", color: "var(--mist-2)", margin: "12px 0 4px" }}>
+                    settlement tx {short((receipt?.settlements[0]?.txXrpl ?? settled[0]?.txXrpl) as string, 10)}
+                  </p>
+                  <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 10 }}>
+                    <a className="btn btn-violet" style={{ padding: "9px 18px", fontSize: "0.85rem" }} target="_blank" rel="noreferrer"
+                      href={`${CONFIG.xrplExplorer}/transactions/${receipt?.settlements[0]?.txXrpl ?? settled[0]?.txXrpl}`}>
+                      View on XRPL Explorer
+                    </a>
+                    <button className="btn btn-ghost" style={{ padding: "9px 18px", fontSize: "0.85rem" }}
+                      onClick={() => {
+                        const blob = new Blob([JSON.stringify({ vault: address, receipt, events }, null, 2)], { type: "application/json" });
+                        const a = document.createElement("a");
+                        a.href = URL.createObjectURL(blob);
+                        a.download = `heirloom-receipt-${address.slice(2, 10)}.json`;
+                        a.click();
+                      }}>
+                      ⇩ Download receipt
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
           {v.state >= 5 && (
             <div className="card" style={{ borderColor: "color-mix(in srgb, var(--verdant) 45%, transparent)" }}>
               <h3 style={{ marginBottom: 12 }}>Payout receipt</h3>

@@ -345,8 +345,8 @@ export default function App() {
                 )}
               </span>
             ) : (
-              <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: "0.85rem" }} onClick={() => setModalOpen(true)} disabled={connecting}>
-                {connecting ? "Connecting…" : "Connect wallet"}
+              <button className="btn btn-primary" style={{ padding: "9px 18px", fontSize: "0.85rem" }} onClick={() => setModalOpen(true)} disabled={connecting}>
+                {connecting ? "Connecting…" : "Connect Wallet"}
               </button>
             )}
             <span style={{ position: "relative" }} className="burger-wrap">

@@ -1,6 +1,17 @@
-// The signature element: a ledger-ticked dial that fills as silence elapses
-// and pulses while the owner is provably alive.
+// The signature dial, reskinned to the reference mock: a thick multi-segment
+// ring (green while safe, orange as the deadline nears, orange in a challenge)
+// with a violet heartbeat wave running through the center.
 import { useEffect, useState } from "react";
+
+function arc(cx: number, cy: number, r: number, from: number, to: number) {
+  // fractions of the circle, starting at 12 o'clock, clockwise
+  const a0 = 2 * Math.PI * from - Math.PI / 2;
+  const a1 = 2 * Math.PI * to - Math.PI / 2;
+  const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
+  const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+  const large = to - from > 0.5 ? 1 : 0;
+  return `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}`;
+}
 
 export function PulseDial({
   size = 260,
@@ -11,8 +22,8 @@ export function PulseDial({
 }: {
   size?: number;
   lastAliveTs: number; // unix
-  deadlineTs: number; // unix — end of period+grace
-  state: number; // vault state
+  deadlineTs: number;  // unix — end of period+grace (or challenge end)
+  state: number;       // vault state
   label?: string;
 }) {
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
@@ -26,12 +37,13 @@ export function PulseDial({
   const frac = state >= 4 ? 1 : elapsed / total;
   const remaining = Math.max(0, deadlineTs - now);
 
-  const r = size / 2 - 14;
   const cx = size / 2;
-  const circ = 2 * Math.PI * r;
-  const ticks = 48;
+  const r = size / 2 - 12;
+  const W = 9; // ring thickness
   const alive = state === 2 && remaining > 0;
-  const color = state >= 4 ? "var(--ember)" : state === 3 ? "var(--ember)" : remaining > total * 0.25 ? "var(--verdant)" : "var(--lamplight)";
+  const challenge = state === 3;
+  const settled = state >= 5;
+  const AMBER_AT = 0.72; // the tail of the window renders orange
 
   const fmt = (s: number) => {
     if (s >= 86400) return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
@@ -40,44 +52,54 @@ export function PulseDial({
     return `${s}s`;
   };
 
+  const greenTo = challenge ? 0 : Math.min(frac, AMBER_AT);
+  const amberFrom = AMBER_AT;
+  const amberTo = challenge ? frac : frac > AMBER_AT ? frac : AMBER_AT;
+  const eps = 0.004;
+
   return (
     <div className="dial-wrap" style={{ width: size, height: size }} role="img"
-      aria-label={`Inactivity dial: ${fmt(remaining)} until the silence deadline`}>
+      aria-label={`Inactivity dial: ${fmt(remaining)} until the ${challenge ? "challenge ends" : "silence deadline"}`}>
       <svg width={size} height={size}>
-        {/* ledger ticks */}
-        {Array.from({ length: ticks }, (_, i) => {
-          const a = (i / ticks) * 2 * Math.PI - Math.PI / 2;
-          const r1 = r + 6;
-          const r2 = r + (i % 4 === 0 ? 12 : 9);
-          return (
-            <line
-              key={i}
-              x1={cx + r1 * Math.cos(a)} y1={cx + r1 * Math.sin(a)}
-              x2={cx + r2 * Math.cos(a)} y2={cx + r2 * Math.sin(a)}
-              stroke={i / ticks <= frac ? color : "var(--line)"}
-              strokeWidth={1}
-            />
-          );
-        })}
-        {/* base ring */}
-        <circle cx={cx} cy={cx} r={r} fill="none" stroke="var(--line)" strokeWidth={2} />
-        {/* silence progress */}
-        <circle
-          cx={cx} cy={cx} r={r} fill="none"
-          stroke={color} strokeWidth={2.5} strokeLinecap="round"
-          strokeDasharray={circ}
-          strokeDashoffset={circ * (1 - frac)}
-          transform={`rotate(-90 ${cx} ${cx})`}
-          style={{ transition: "stroke-dashoffset 1s linear" }}
-        />
-        {/* alive pulse */}
-        {alive && (
-          <circle className="pulse-ping" cx={cx} cy={cx} r={r - 18} fill="none" stroke="var(--verdant)" strokeWidth={1.2} />
+        <defs>
+          <linearGradient id="hl-green" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#2fd674" />
+            <stop offset="100%" stopColor="#8be04a" />
+          </linearGradient>
+          <linearGradient id="hl-amber" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#ffb03c" />
+            <stop offset="100%" stopColor="#ff8a3c" />
+          </linearGradient>
+        </defs>
+        {/* track */}
+        <circle cx={cx} cy={cx} r={r} fill="none" stroke="var(--line)" strokeWidth={W} opacity={0.55} />
+        {/* settled: full green ring */}
+        {settled && <circle cx={cx} cy={cx} r={r} fill="none" stroke="url(#hl-green)" strokeWidth={W} strokeLinecap="round" />}
+        {/* elapsed, safe part (green) */}
+        {!settled && greenTo > eps && (
+          <path d={arc(cx, cx, r, 0, greenTo)} fill="none" stroke="url(#hl-green)" strokeWidth={W} strokeLinecap="round" />
         )}
+        {/* the tail of the window / challenge (orange) */}
+        {!settled && (challenge ? frac > eps : frac > AMBER_AT) && (
+          <path d={arc(cx, cx, r, challenge ? 0 : amberFrom, Math.max(amberTo, (challenge ? 0 : amberFrom) + eps))}
+            fill="none" stroke="url(#hl-amber)" strokeWidth={W} strokeLinecap="round" />
+        )}
+        {/* releasing: full amber */}
+        {state === 4 && <circle cx={cx} cy={cx} r={r} fill="none" stroke="url(#hl-amber)" strokeWidth={W} strokeLinecap="round" opacity={0.9} />}
+        {/* alive ping */}
+        {alive && <circle className="pulse-ping" cx={cx} cy={cx} r={r - 16} fill="none" stroke="var(--verdant)" strokeWidth={1.2} />}
+        {challenge && <circle className="pulse-ping" cx={cx} cy={cx} r={r - 16} fill="none" stroke="var(--ember)" strokeWidth={1.4} />}
+        {/* heartbeat wave through the center */}
+        <polyline
+          className="ecg"
+          points={`${cx - r * 0.55},${cx + r * 0.38} ${cx - r * 0.3},${cx + r * 0.38} ${cx - r * 0.2},${cx + r * 0.26} ${cx - r * 0.08},${cx + r * 0.5} ${cx + r * 0.02},${cx + r * 0.3} ${cx + r * 0.12},${cx + r * 0.38} ${cx + r * 0.55},${cx + r * 0.38}`}
+          fill="none" stroke="var(--violet)" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round"
+          strokeDasharray="110 110" opacity={0.85}
+        />
       </svg>
       <div className="dial-center">
-        <div className="big">{state >= 4 ? "—" : fmt(remaining)}</div>
-        <div className="small">{label ?? (state === 3 ? "challenge window" : "until silence deadline")}</div>
+        <div className="big">{state >= 4 ? (settled ? "✓" : "—") : fmt(remaining)}</div>
+        <div className="small">{label ?? (challenge ? "challenge window" : "until silence deadline")}</div>
       </div>
     </div>
   );
