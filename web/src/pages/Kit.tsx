@@ -21,6 +21,7 @@ export function Kit() {
   const [rec, setRec] = useState<Recovery | null>(null);
   const [qr, setQr] = useState<string>("");
   const url = `${window.location.origin}/claim/${address}`;
+  const kitId = `HL-${address.slice(2, 6).toUpperCase()}-${address.slice(-4).toUpperCase()}`;
 
   useEffect(() => {
     readVault(address).then(setV).catch(() => {});
@@ -33,17 +34,46 @@ export function Kit() {
 
   return (
     <main className="wrap kit-sheet" style={{ padding: "44px 24px", maxWidth: 720 }}>
-      <div className="no-print" style={{ marginBottom: 22, display: "flex", gap: 12, flexWrap: "wrap" }}>
+      <div className="no-print" style={{ marginBottom: 22, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <button className="btn btn-primary" onClick={() => window.print()}>Print / save as PDF</button>
+        <button className="btn btn-ghost" onClick={() => {
+          // self-contained recovery manifest: everything needed to rebuild every
+          // proof and finish a claim even if Heirloom disappears — no secrets inside
+          const manifest = {
+            kitId,
+            vault: address,
+            network: { flare: "Coston2 (chainId 114)", xrpl: "testnet" },
+            contracts: { factory: CONFIG.factory, fxrp: CONFIG.fxrp, assetManager: CONFIG.assetManager },
+            owner: rec?.ownerXrpl ?? rec?.ownerEvm ?? null,
+            ownerMode: rec?.mode ?? "xrpl",
+            beneficiary: rec?.beneficiaryXrpl ?? null,
+            heartbeatBeacon: rec?.beacon ?? CONFIG.beacon,
+            heartbeatReference: rec?.reference ?? null,
+            claimUrl: url,
+            rules: v ? { heartbeatPeriodSec: v.heartbeatPeriod, gracePeriodSec: v.gracePeriod, challengePeriodSec: v.challengePeriod } : null,
+            proofRecipe: rec?.mode === "evm"
+              ? "silence clock = Flare consensus time vs lastHeartbeatTs; after period+grace anyone may call startClaim(beneficiary), wait out the challenge, then executeRelease()"
+              : "silence proof = FDC ReferencedPaymentNonexistence over the beacon with the heartbeat reference, checkSourceAddresses=true, sourceAddressesRoot=keccak256(keccak256(owner)), chained from lastHeartbeatLedger+1; then startClaim(beneficiary) → challenge → executeRelease()",
+            generatedAt: new Date().toISOString(),
+          };
+          const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `heirloom-recovery-${address.slice(2, 10)}.json`;
+          a.click();
+        }}>⇩ Download recovery file</button>
         <span style={{ alignSelf: "center", fontSize: "0.85rem", color: "var(--mist)" }}>
-          Give this sheet to your beneficiary — and rehearse the claim once, together, today.
+          Give both to your beneficiary — and rehearse the claim once, together, today.
         </span>
       </div>
 
       <div style={{ border: "1px solid var(--line)", borderRadius: 14, padding: 34 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 300 }}>
-            <div className="eyebrow">Heirloom · Recovery Kit · {v ? "demo timing (testnet)" : ""}</div>
+            <div className="eyebrow" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <span>Heirloom · Recovery Kit · {v ? "demo timing (testnet)" : ""}</span>
+              <span className="mono" style={{ letterSpacing: "0.06em" }}>Kit ID {kitId}</span>
+            </div>
             <h1 style={{ fontSize: "1.7rem", margin: "10px 0 6px" }}>If I go silent, this is yours to use.</h1>
             <p style={{ fontSize: "0.88rem" }}>
               Someone chose you as the beneficiary of their XRP continuity vault. Keep this sheet safe. It is
