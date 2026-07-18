@@ -63,9 +63,9 @@ Rolling checkpoints for production-scale periods are implemented and chain-teste
 
 The EVM side has **no privileged keys**. Every state change is authorized by an XRPL event proven by FDC, or a public timeout; every keeper action is a permissionless crank anyone could submit from public data (we watched a third-party executor beat our own keeper to a mint — the vault didn't care).
 
-Contracts: `HeirloomVault` (7-state machine, dual-proof validation, challenge veto, XRPL-signed cancel; 12 unit tests incl. adversarial cases) + `HeirloomFactory` (EIP-1167 clone per plan). Factory: `0x090a69eE156108A6aE0a6a1a96575443ef4b584a` (Coston2).
+Contracts: `HeirloomVault` (7-state machine, dual-proof validation, challenge veto, XRPL-signed cancel, EVM-owner mode with consensus-time silence) + `HeirloomFactory` (EIP-1167 clone per plan). Factory (v3): `0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2` (Coston2). 15 unit tests incl. adversarial + EVM-owner suites.
 
-App: create a plan in 60 seconds (GemWallet or any XRPL wallet via copyable instructions), a living Pulse Dial, an evidence timeline where every entry links to a public transaction, and a printable **Recovery Kit** so the beneficiary can claim without our help.
+App: the **Live Case Dashboard** (`/case/001`) replays one real completed lifecycle in seven chapters — dual-ledger transaction rail, two attack drills, and a reconciled payout receipt whose five integrity checks are generated from chain data by `spike/build-case.mjs`, plus a 90-second guided tour. Create a plan in 60 seconds (GemWallet first; MetaMask/OKX auto-adds Coston2 for one-click check-ins; or any XRPL wallet via copyable instructions), a living Pulse Dial, an evidence timeline where every entry links to a public transaction, and a printable **Recovery Kit** so the beneficiary can claim without our help.
 
 ## What was built during the hackathon
 
@@ -82,8 +82,9 @@ Mainnet with 90–180-day periods and 7-day rolling checkpoints · lost-key self
 
 ## 评委可测清单（Details 末尾或 comment 区可补）
 
-- Live: https://heirloom.axiqo.xyz （创建自己的金库全程真实交易）
-- Factory explorer: https://coston2-explorer.flare.network/address/0x090a69eE156108A6aE0a6a1a96575443ef4b584a
+- Live case（60 秒无钱包审计线路）: https://heirloom.axiqo.xyz/case/001
+- Live: https://heirloom.axiqo.xyz （创建自己的金库全程真实交易；GemWallet 优先，MetaMask/OKX 自动加 Coston2）
+- Factory explorer (v3): https://coston2-explorer.flare.network/address/0xa1b97724E7447278ed749f57CEa1915Ad2C3AFA2
 - 两次完整生命周期的关键 tx 全在 README 表格（含 XRPL payout 双证）
 
 ## Team / Contact
