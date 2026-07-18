@@ -59,7 +59,9 @@ beneficiary's wallet ◀─── real XRP
 
 ## Try it (judges)
 
-1. **60 seconds:** open https://heirloom.axiqo.xyz — the hero dial plays the whole lifecycle; "Two impossibilities" carries the real verifier verdicts.
+1. **60 seconds:** open https://heirloom.axiqo.xyz — "A real plan, replayed" walks the five chapters of an
+   actual completed vault (creation → heartbeat → silence → challenge → 9.95 XRP delivered), every chapter
+   linking to its real transactions. Open the plan's receipt for the full payout evidence.
 2. **5 minutes:** *Create a plan* → connect [GemWallet](https://gemwallet.app) (XRPL testnet) or paste any funded testnet address → the keeper deploys **your own vault** on Coston2 → fund it with the one displayed XRPL payment → watch FXRP arrive and the dial go live. Send a heartbeat; open the beneficiary view and try to claim early — watch the chain refuse.
 3. **Deep:** contracts in [`contracts/`](contracts/) (12 unit tests incl. adversarial cases), proof mechanics in [`spike/`](spike/) (gate scripts with saved on-chain artifacts), keeper in [`keeper/`](keeper/), threat model in [`THREAT_MODEL.md`](THREAT_MODEL.md).
 

@@ -26,7 +26,7 @@ open-source service against the same contracts.
 | 4 | **Silence ≠ death** — hospital stays, lost phones, travel | Grace period + challenge window are first-class config. The owner's veto is a single 1-drop payment from anywhere in the world. Roadmap: multi-channel expiry reminders. |
 | 5 | **Keeper censorship or death** | All cranks are permissionless; the beneficiary's Recovery Kit contains everything needed to claim without us. Keeper is open source. |
 | 6 | **Wrong beneficiary address** | The address is committed as a hash at creation and revealed at claim; the UI shows a fingerprint at both ends and the Recovery Kit repeats it. Nothing can change it after creation except the owner cancelling and re-creating — by design. |
-| 7 | **FAssets redemption risk** — agent fails to pay the underlying XRP | FAssets' own default path compensates from agent collateral; the vault's `Releasing` state is re-crankable until the balance is settled. Sub-lot dust cannot be redeemed (FAssets lot size); the app enforces whole-lot funding so dust is ~zero. |
+| 7 | **FAssets redemption risk** — agent fails to pay the underlying XRP | FAssets' own default path compensates from agent collateral; the vault's `Releasing` state is re-crankable until the balance is settled. The vault redeems its **full balance** via `redeemAmount` (arbitrary amounts, no lot rounding); only a residual below the protocol's 5-FXRP redemption minimum can ever remain, in which case the vault closes honestly with a `ResidualBelowMinimum` event and the receipt shows the exact remainder. |
 | 8 | **Direct-minting edge cases** — payment below minimum fee is forfeited by the protocol; wrong memo strands the mint | The app computes the gross amount with a safety margin and renders the exact memo; the keeper watches for `DirectMintingExecuted`. Recovery guidance for stuck mints is part of the funding screen. |
 | 9 | **FCC / privacy expectations** | Heirloom does **not** claim private settlement: the final payout is a public XRPL transaction. On-chain, owner/beneficiary/beacon appear only as hashes until claim time — correlation from XRPL activity is possible and documented. |
 
@@ -44,7 +44,8 @@ open-source service against the same contracts.
 
 - Demo timing (minutes, clearly labelled) on Coston2; production timing is a config change.
 - One beneficiary per vault; value-split across several heirs is roadmap.
-- Sub-lot FXRP dust at release stays in the vault (app enforces whole-lot funding).
+- A residual below the 5-FXRP protocol redemption minimum stays visible in the vault (full-balance
+  `redeemAmount` makes this ~zero in practice; the payout receipt always states the exact remainder).
 - The keeper currently also acts as the direct-minting executor; any party can replace it.
 - Legal standing: transferring key control is not the same as transferring legal title. Pair Heirloom
   with a will that names the same beneficiary.
