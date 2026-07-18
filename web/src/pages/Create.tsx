@@ -147,9 +147,9 @@ export function Create() {
             <div className="notice ok" style={{ marginBottom: 14 }}>Connected (XRPL): <span className="mono">{wallet.address}</span></div>
           ) : evm.address ? (
             <div className="notice ok" style={{ marginBottom: 14 }}>
-              Owner via {evm.kind}: <span className="mono">{short(evm.address, 8)}</span> — your check-ins become
-              one-click Flare transactions. Prefer XRPL-native heartbeats? Connect GemWallet or type an XRPL
-              address below and it takes priority.
+              Owner via {evm.kind}: <span className="mono">{short(evm.address, 8)}</span> — detected automatically;
+              your check-ins become one-click Flare transactions. Prefer XRPL-native heartbeats? Connect GemWallet
+              and it takes priority.
             </div>
           ) : (
             <div style={{ marginBottom: 14 }}>
@@ -171,10 +171,19 @@ export function Create() {
               </details>
             </div>
           )}
-          <div className="field">
-            <label>{evmMode ? "Your XRPL address — optional; your connected EVM account is the owner" : "Your XRPL address (the owner)"}</label>
-            <input placeholder={evmMode ? "r… (leave empty to check in from MetaMask/OKX)" : "r…"} value={draft.ownerXrpl || wallet.address || ""} onChange={(e) => set("ownerXrpl", e.target.value.trim())} />
-          </div>
+          {evmMode ? (
+            <div className="kv" style={{ marginBottom: 16 }}>
+              <div className="kv-row">
+                <span className="k">Owner (auto-detected)</span>
+                <span className="v" style={{ color: "var(--verdant)" }}>✓ {short(evm.address ?? "", 8)} · {evm.kind}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="field">
+              <label>Your XRPL address (the owner)</label>
+              <input placeholder="r…" value={draft.ownerXrpl || wallet.address || ""} onChange={(e) => set("ownerXrpl", e.target.value.trim())} />
+            </div>
+          )}
           <div className="field">
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
               <span>Their XRPL address (the beneficiary)</span>

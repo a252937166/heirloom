@@ -8,6 +8,7 @@ import { Kit } from "./pages/Kit";
 import { CaseStudy } from "./pages/CaseStudy";
 import { WalletModal } from "./components/WalletModal";
 import { FlareMark } from "./components/FlareMark";
+import lockup from "./assets/heirloom-lockup.png";
 import { WalletState, connectWallet, fundTestXrp, xrpBalance } from "./lib/gem";
 import { EVM_NONE, EvmState, WalletOption, connectWith, disconnectEvm, retrySwitch, silentReconnect } from "./lib/evm";
 import { CONFIG } from "./config";
@@ -185,8 +186,8 @@ export default function App() {
       <header style={{ borderBottom: "1px solid var(--line)", position: "sticky", top: 0, background: "color-mix(in srgb, var(--ink) 88%, transparent)", backdropFilter: "blur(8px)", zIndex: 10 }} className="no-print">
         <div className="wrap" style={{ display: "flex", alignItems: "center", gap: 26, height: 62 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <Link to="/" style={{ fontFamily: "var(--font-display)", fontSize: "1.25rem", color: "var(--paper)", textDecoration: "none" }}>
-              Heirloom<span style={{ color: "var(--lamplight)" }}>.</span>
+            <Link to="/" style={{ display: "inline-flex", alignItems: "center" }} aria-label="Heirloom home">
+              <img src={lockup} alt="Heirloom — continuity vault for XRP" style={{ height: 30, display: "block" }} />
             </Link>
             <span className="pill" style={{ fontSize: "0.55rem", letterSpacing: "0.12em", padding: "3px 8px", color: "var(--mist-2)" }}>TESTNET</span>
             <a href="https://dev.flare.network" target="_blank" rel="noreferrer" className="mono" title="Built on Flare"

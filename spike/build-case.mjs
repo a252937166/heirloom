@@ -140,7 +140,11 @@ const manifest = {
   silenceRound: silence?.round ?? null,
   redemptionIds: redemption ? [`#${redemption.requestId}`] : (released?.label.match(/#\d+/g) ?? []),
   redemption,
-  contractVersion: "HeirloomVault v2 (this case predates the v3 EVM-owner field; v3 factory: " + dep.factory + ")",
+  contractVersion: cfg.vetoProofGrace !== undefined && Number(cfg.vetoProofGrace) > 0
+    ? `HeirloomVault v4 (veto proof grace ${cfg.vetoProofGrace}s; factory ${dep.factory})`
+    : cfg.ownerEvm !== undefined
+      ? "HeirloomVault v3"
+      : "HeirloomVault v2 (predates the v3 EVM-owner field)",
   mintTxFlare,
   fundingTxXrpl: first("funding")?.txXrpl ?? null,
   heartbeatTxXrpl: first("heartbeat")?.txXrpl ?? null,
