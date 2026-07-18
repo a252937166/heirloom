@@ -468,6 +468,11 @@ export default function App() {
             not a substitute for a legally valid will. Running on <FlareMark size={13} /> <span className="mono">Coston2</span> testnet
             with demo timing.
           </p>
+          <p className="mono" style={{ fontSize: "0.64rem", marginTop: 10, color: "var(--mist-2)" }}>
+            build <a href={`${CONFIG.github}/tree/${__BUILD_SHA__}`} target="_blank" rel="noreferrer">{__BUILD_SHA__}</a> ·
+            factory <a href={`${CONFIG.explorer}/address/${CONFIG.factory}`} target="_blank" rel="noreferrer">{CONFIG.factory.slice(0, 10)}…</a> ·
+            open source · MIT
+          </p>
         </div>
       </footer>
     </WalletCtx.Provider>
