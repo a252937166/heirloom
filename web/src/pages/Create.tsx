@@ -20,7 +20,7 @@ const mins = (s: number) => (s % 60 === 0 ? `${s / 60} minute${s === 60 ? "" : "
 
 export function Create() {
   const nav = useNavigate();
-  const { wallet, evm, connect, connectEvm, connecting } = useWallet();
+  const { wallet, evm, connect, openConnect, connecting } = useWallet();
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -137,8 +137,8 @@ export function Create() {
                 <button className="btn btn-ghost" onClick={connect} disabled={connecting}>
                   {connecting ? "Looking for wallet…" : "Connect GemWallet (XRPL)"}
                 </button>
-                <button className="btn btn-ghost" onClick={connectEvm} disabled={connecting} style={{ opacity: 0.85 }}>
-                  MetaMask / OKX
+                <button className="btn btn-ghost" onClick={openConnect} disabled={connecting} style={{ opacity: 0.85 }}>
+                  EVM wallet (MetaMask / OKX)
                 </button>
               </div>
               <p className="hint" style={{ fontSize: "0.8rem", color: "var(--mist)", marginTop: 10 }}>

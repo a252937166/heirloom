@@ -6,23 +6,24 @@ import { Vault } from "./pages/Vault";
 import { Claim } from "./pages/Claim";
 import { Kit } from "./pages/Kit";
 import { CaseStudy } from "./pages/CaseStudy";
+import { WalletModal } from "./components/WalletModal";
 import { WalletState, connectWallet } from "./lib/gem";
-import { EVM_NONE, EvmState, connectEvm as connectEvmWallet } from "./lib/evm";
+import { EVM_NONE, EvmState, WalletOption, connectWith, retrySwitch } from "./lib/evm";
 import { CONFIG } from "./config";
 import { short, vaultsOfOwner } from "./lib/chain";
 
 const WalletCtx = createContext<{
   wallet: WalletState;
   evm: EvmState;
-  connect: () => Promise<void>;
-  connectEvm: () => Promise<void>;
+  connect: () => Promise<WalletState>;
+  openConnect: () => void;
   connecting: boolean;
   notice: string | null;
 }>({
   wallet: { installed: false, address: null, network: null },
   evm: EVM_NONE,
-  connect: async () => {},
-  connectEvm: async () => {},
+  connect: async () => ({ installed: false, address: null, network: null }),
+  openConnect: () => {},
   connecting: false,
   notice: null,
 });
@@ -33,6 +34,7 @@ export default function App() {
   const [evm, setEvm] = useState<EvmState>(EVM_NONE);
   const [connecting, setConnecting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [myPlans, setMyPlans] = useState<string[]>([]);
   const [plansOpen, setPlansOpen] = useState(false);
   const loc = useLocation();
@@ -48,37 +50,35 @@ export default function App() {
     }
   }, [wallet.address, evm.address]);
 
-  // The XRPL-native wallet is the primary path — heartbeats are 1-drop XRPL
-  // payments proven by FDC. MetaMask/OKX is the wider door for owners without
-  // an XRPL extension: Coston2 is added automatically, check-ins are one click.
-  const connect = async () => {
+  // XRPL-native (GemWallet) is the hero path — 1-drop heartbeats proven by FDC.
+  const connect = async (): Promise<WalletState> => {
     setConnecting(true);
     setNotice(null);
+    let w: WalletState = { installed: false, address: null, network: null };
     try {
-      const w = await connectWallet();
+      w = await connectWallet();
       setWallet(w);
-      if (!w.installed) {
-        setNotice("no-wallet");
-      } else if (!w.address) {
-        setNotice("rejected");
-      } else if (w.network && !/test/i.test(w.network)) {
-        setNotice("wrong-network");
-      }
+      if (!w.installed) setNotice("no-wallet");
+      else if (!w.address) setNotice("rejected");
+      else if (w.network && !/test/i.test(w.network)) setNotice("wrong-network");
     } catch {
       setNotice("no-wallet");
     } finally {
       setConnecting(false);
     }
+    return w;
   };
 
-  const connectEvm = async () => {
+  // EVM wallets from the Connections dialog — real identity via EIP-6963,
+  // Coston2 switched/added automatically and verified with eth_chainId.
+  const pickEvm = async (opt: WalletOption) => {
     setConnecting(true);
     setNotice(null);
     try {
-      const st = await connectEvmWallet();
+      const st = await connectWith(opt);
       setEvm(st);
-      if (!st.available) setNotice("no-evm");
-      else if (!st.address) setNotice("evm-rejected");
+      if (st.address) setModalOpen(false);
+      else setNotice("evm-rejected");
     } catch (e) {
       setNotice(/rejected|denied|4001/i.test(String((e as Error).message)) ? "evm-rejected" : "no-evm");
     } finally {
@@ -86,8 +86,23 @@ export default function App() {
     }
   };
 
+  const pickXrpl = async () => {
+    const w = await connect();
+    if (w.address) setModalOpen(false);
+  };
+
+  const retryNetwork = async () => {
+    setConnecting(true);
+    try {
+      const ok = await retrySwitch();
+      setEvm((s) => ({ ...s, chainOk: ok }));
+    } finally {
+      setConnecting(false);
+    }
+  };
+
   return (
-    <WalletCtx.Provider value={{ wallet, evm, connect, connectEvm, connecting, notice }}>
+    <WalletCtx.Provider value={{ wallet, evm, connect, openConnect: () => setModalOpen(true), connecting, notice }}>
       <header style={{ borderBottom: "1px solid var(--line)", position: "sticky", top: 0, background: "color-mix(in srgb, var(--ink) 88%, transparent)", backdropFilter: "blur(8px)", zIndex: 10 }} className="no-print">
         <div className="wrap" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 62 }}>
           <Link to="/" style={{ fontFamily: "var(--font-display)", fontSize: "1.25rem", color: "var(--paper)", textDecoration: "none" }}>
@@ -124,52 +139,70 @@ export default function App() {
             )}
             {wallet.address ? (
               <span className="pill gold" title={wallet.address}>
-                ● {short(wallet.address, 6)} · XRPL
+                ● {short(wallet.address, 6)} · GemWallet
               </span>
             ) : evm.address ? (
-              <span className="pill gold" title={evm.address}>
-                ● {short(evm.address, 6)} · {evm.kind}
+              <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span className="pill gold" title={evm.address} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {evm.icon ? <img src={evm.icon} alt="" style={{ width: 14, height: 14, borderRadius: 4 }} /> : <span>●</span>}
+                  {short(evm.address, 6)} · {evm.kind}
+                </span>
+                {evm.chainOk ? (
+                  <span className="pill" style={{ color: "var(--verdant)", fontSize: "0.68rem" }}>Coston2</span>
+                ) : (
+                  <button className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: "0.72rem", color: "var(--ember)", borderColor: "color-mix(in srgb, var(--ember) 45%, transparent)" }}
+                    onClick={retryNetwork} disabled={connecting}>
+                    {connecting ? "Switching…" : "Switch to Coston2"}
+                  </button>
+                )}
               </span>
             ) : (
-              <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: "0.85rem" }} onClick={connect} disabled={connecting}>
-                {connecting ? "Looking for wallet…" : "Connect XRPL wallet"}
+              <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: "0.85rem" }} onClick={() => setModalOpen(true)} disabled={connecting}>
+                {connecting ? "Connecting…" : "Connect wallet"}
               </button>
             )}
           </nav>
         </div>
-        {notice === "no-wallet" && (
+        {evm.address && !evm.chainOk && (
           <div className="wrap" style={{ paddingBottom: 12 }}>
-            <div className="notice" style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+            <div className="notice err" style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
               <span>
-                No XRPL wallet extension detected. Install{" "}
-                <a href="https://gemwallet.app" target="_blank" rel="noreferrer">GemWallet</a> (2 minutes, testnet
-                supported) — or use an EVM wallet instead: your check-ins become one-click Flare transactions and
-                Coston2 is added automatically. Manual mode (copy-paste payments) also works everywhere.
+                {evm.kind} is connected but on another network. Heirloom runs on <strong>Flare Testnet Coston2</strong> —
+                approve the switch prompt in your wallet.
               </span>
-              <span style={{ display: "flex", gap: 10 }}>
-                <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: "0.78rem" }} onClick={connectEvm} disabled={connecting}>
-                  Connect MetaMask / OKX
-                </button>
-                <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: "0.78rem" }} onClick={() => setNotice(null)}>
-                  Got it
-                </button>
-              </span>
+              <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: "0.78rem" }} onClick={retryNetwork} disabled={connecting}>
+                {connecting ? "Switching…" : "Switch network"}
+              </button>
             </div>
           </div>
         )}
         {notice === "no-evm" && (
           <div className="wrap" style={{ paddingBottom: 12 }}>
             <div className="notice err">
-              No MetaMask or OKX extension detected either. Install{" "}
+              That wallet didn't respond. Install{" "}
               <a href="https://gemwallet.app" target="_blank" rel="noreferrer">GemWallet</a> (XRPL, recommended) or{" "}
               <a href="https://metamask.io" target="_blank" rel="noreferrer">MetaMask</a> — or continue without a
-              wallet: paste your address where asked and pay by copying the payment details into any wallet.
+              wallet: every payment is shown as copyable instructions.
             </div>
           </div>
         )}
         {notice === "evm-rejected" && (
           <div className="wrap" style={{ paddingBottom: 12 }}>
             <div className="notice err">The wallet declined. Approve the connection and the Coston2 network prompt, then try again.</div>
+          </div>
+        )}
+        {notice === "no-wallet" && (
+          <div className="wrap" style={{ paddingBottom: 12 }}>
+            <div className="notice" style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+              <span>
+                GemWallet isn't in this browser. <a href="https://gemwallet.app" target="_blank" rel="noreferrer">Install it</a>{" "}
+                (2 minutes, testnet supported) — or pick an EVM wallet in <em>Connect wallet</em>; manual copy-paste
+                mode works everywhere too.
+              </span>
+              <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: "0.78rem" }} onClick={() => setNotice(null)}>
+                Got it
+              </button>
+            </div>
           </div>
         )}
         {notice === "rejected" && (
@@ -186,6 +219,9 @@ export default function App() {
           </div>
         )}
       </header>
+
+      <WalletModal open={modalOpen} onClose={() => setModalOpen(false)} onXrpl={pickXrpl} onEvm={pickEvm} busy={connecting} />
+
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/case/001" element={<CaseStudy />} />
