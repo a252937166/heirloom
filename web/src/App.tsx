@@ -6,6 +6,7 @@ import { Vault } from "./pages/Vault";
 import { Claim } from "./pages/Claim";
 import { Kit } from "./pages/Kit";
 import { CaseStudy } from "./pages/CaseStudy";
+import { Rehearsal } from "./pages/Rehearsal";
 import { WalletModal } from "./components/WalletModal";
 import { FlareMark } from "./components/FlareMark";
 import lockup from "./assets/heirloom-lockup.png";
@@ -457,6 +458,7 @@ export default function App() {
         <Route path="/vault/:address" element={<Vault />} />
         <Route path="/claim/:address" element={<Claim />} />
         <Route path="/kit/:address" element={<Kit />} />
+        <Route path="/rehearsal" element={<Rehearsal />} />
       </Routes>
       </div>
       <footer className="footer-honest no-print">

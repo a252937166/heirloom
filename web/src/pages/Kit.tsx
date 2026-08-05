@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { CONFIG } from "../config";
 import { VaultView, readVault, short } from "../lib/chain";
@@ -64,7 +64,7 @@ export function Kit() {
           }));
         }}>⇩ Download recovery file</button>
         <span style={{ alignSelf: "center", fontSize: "0.85rem", color: "var(--mist)" }}>
-          Give both to your beneficiary — and rehearse the claim once, together, today.
+          Give both to your beneficiary — and <Link to={`/rehearsal?vault=${address}`}>rehearse the claim once, together, today</Link>.
         </span>
       </div>
       {incomplete && (

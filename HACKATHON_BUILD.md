@@ -28,6 +28,11 @@ Chronology (see `git log` for the full record):
    settings; multi-request redemptions only show "delivered" when EVERY payment reference has settled;
    event-text clocks are UTC; the spike lockfile resolves from the registry so a clean clone reproduces
    (enforced in CI). A fresh full lifecycle was re-run end-to-end on the live stack after the fixes.
+7. **The rehearsal run sheet (`/rehearsal`)** — the Recovery Kit's "rehearse the claim once, together,
+   today" as a product surface: a two-person, seven-step guided run where five checks flip only on chain
+   or keeper evidence (vault answers, Active state, heartbeat epoch, the recorded on-chain drill refusal)
+   and the two that cannot be verified say "self-attested". Ends in a downloadable JSON receipt — the
+   evidence behind "N owner–beneficiary pairs rehearsed unassisted".
 
-Frozen submission state: tag `submission-v5` — the tag's commit is the single source of truth and is shown verbatim in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
+Frozen submission state: tag `submission-v6` — the tag's commit is the single source of truth and is shown verbatim in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
 `node spike/build-case.mjs` (defaults to the canonical v4 vault `0x35975770e1eD5431e0bFCaBB238B6188c94AeAdA`), then validate with `node spike/validate-case.mjs`.

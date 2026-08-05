@@ -80,6 +80,7 @@ export function Landing() {
           <div style={{ display: "flex", gap: 12, marginTop: 26, flexWrap: "wrap" }}>
             <Link to="/case/001" className="btn btn-primary">Watch a real plan complete</Link>
             <Link to="/create" className="btn btn-ghost">Create a test plan</Link>
+            <Link to="/rehearsal" className="btn btn-ghost">Rehearse the handover</Link>
           </div>
           <p className="mono" style={{ fontSize: "0.68rem", marginTop: 16, color: "var(--mist-2)" }}>
             No EVM wallet needed on the XRP-native path · no seed phrases shared · no custody.
