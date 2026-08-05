@@ -74,6 +74,9 @@ export function Rehearsal() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
   const update = useCallback((s: RehearsalSession) => { saveSession(s); setSession({ ...s }); }, []);
+  // every mutation starts from the persisted session, not the render's copy —
+  // the evidence timer writes concurrently and last-write-wins must not lose steps
+  const fresh = useCallback((): RehearsalSession | null => loadSession(), []);
 
   // ?vault= deep link (the Kit links here) binds the plan before anything else
   useEffect(() => {
@@ -84,8 +87,10 @@ export function Rehearsal() {
   // a connected GemWallet completes the wallet step by evidence, not by click
   useEffect(() => {
     if (!session || session.steps.wallet || !wallet.address) return;
-    update(markDone({ ...session, mode: "gemwallet" }, "wallet", wallet.address));
-  }, [wallet.address, session, update]);
+    const cur = fresh();
+    if (!cur || cur.steps.wallet) return;
+    update(markDone({ ...cur, mode: "gemwallet" }, "wallet", wallet.address));
+  }, [wallet.address, session, update, fresh]);
 
   // plans owned by the connected wallet — the cheap way to bind without pasting
   useEffect(() => {
@@ -94,12 +99,13 @@ export function Rehearsal() {
   }, [wallet.address]);
 
   const bindVault = useCallback(async (addr: string) => {
-    if (!session) return;
     setBindErr(null);
     if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) { setBindErr("That is not a Coston2 contract address (0x…, 42 characters)."); return; }
     try {
       const v = await readVault(addr);
-      let s: RehearsalSession = { ...session, vault: addr };
+      const cur = fresh();
+      if (!cur) return;
+      let s: RehearsalSession = { ...cur, vault: addr };
       s = markDone(s, "create", addr);
       if (v.state >= 2) s = markDone(s, "fund", `state=${STATE_NAMES[v.state]}`);
       if (v.heartbeatEpoch >= 1) s = markDone(s, "heartbeat", `epoch=${v.heartbeatEpoch}`);
@@ -108,32 +114,35 @@ export function Rehearsal() {
     } catch {
       setBindErr("No vault answers at that address — check the plan page URL (it ends with your vault address).");
     }
-  }, [session, update]);
+  }, [fresh, update]);
 
   // evidence poll: one chain read + one keeper read, every 12s while something
   // verifiable is still open. Completion cascades from state, never from clicks.
+  // Always re-read the persisted session first — a timer callback holding a
+  // stale render's copy would silently overwrite steps completed in between.
   const verify = useCallback(async () => {
-    if (!session?.vault) return;
+    const cur = loadSession();
+    if (!cur?.vault) return;
     setChecking(true);
     try {
-      let s = session;
-      const v = await readVault(session.vault);
+      let s = cur;
+      const v = await readVault(cur.vault);
       setVaultState(v.state);
       if (!s.steps.fund && v.state >= 2) s = markDone(s, "fund", `state=${STATE_NAMES[v.state]}`);
       if (!s.steps.heartbeat && v.heartbeatEpoch >= 1) s = markDone(s, "heartbeat", `epoch=${v.heartbeatEpoch}`);
       if (!s.steps.drill && s.steps.heartbeat) {
-        const r = await fetch(`${CONFIG.api}/vaults/${session.vault}`);
+        const r = await fetch(`${CONFIG.api}/vaults/${cur.vault}`);
         if (r.ok) {
           const evs: KeeperEvent[] = (await r.json()).events ?? [];
           const hit = evs.find((e) => e.kind === "drill" && e.at >= s.startedAt && /blocked/i.test(e.label));
           if (hit) s = markDone(s, "drill", `${fmtClock(hit.at)} · ${hit.label.slice(0, 80)}`);
         }
       }
-      if (s !== session) update(s);
+      if (s !== cur) update(s);
     } catch { /* transient — the next tick retries */ }
     setCheckedAt(Math.floor(Date.now() / 1000));
     setChecking(false);
-  }, [session, update]);
+  }, [update]);
 
   useEffect(() => {
     if (!session?.vault) return;
@@ -274,7 +283,7 @@ export function Rehearsal() {
             and physically give it to your beneficiary. It is not a key — it is the map they will need on the worst
             day. Let them read it now, while you can still answer questions.
           </p>
-          <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={() => update(markDone(session, "handover", "self-attested"))}>
+          <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={() => { const cur = fresh(); if (cur) update(markDone(cur, "handover", "self-attested")); }}>
             The Kit is in their hands
           </button>
         </>
@@ -331,8 +340,10 @@ export function Rehearsal() {
             className="btn btn-primary"
             disabled={DEBRIEF.some((d) => !(answers[d.id] ?? session.answers?.[d.id]))}
             onClick={() => {
-              const merged = { ...(session.answers ?? {}), ...answers };
-              update(markDone({ ...session, answers: merged }, "debrief", `${DEBRIEF.filter((d) => merged[d.id] === d.correct).length}/${DEBRIEF.length} correct`));
+              const cur = fresh();
+              if (!cur) return;
+              const merged = { ...(cur.answers ?? {}), ...answers };
+              update(markDone({ ...cur, answers: merged }, "debrief", `${DEBRIEF.filter((d) => merged[d.id] === d.correct).length}/${DEBRIEF.length} correct`));
             }}
           >
             Record the answers
