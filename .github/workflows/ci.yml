@@ -37,6 +37,11 @@ jobs:
           node --check spike/build-case.mjs
           node --check spike/fdc-lib.mjs
           node --check spike/validate-case.mjs
+      - name: spike deps install from a clean clone (the judge's reproduce path)
+        run: |
+          npm ci
+          node --input-type=module -e "await import('ethers'); await import('xrpl')"
+        working-directory: spike
       - name: validate the shipped case manifest
         run: node spike/validate-case.mjs
   secrets-guard:

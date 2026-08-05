@@ -23,6 +23,9 @@ const AM_EVENTS = new Interface([
 ]);
 const cancelRefOf = (heartbeatReference) =>
   keccak256(concat([toUtf8Bytes("HEIRLOOM/CANCEL"), heartbeatReference]));
+// event text is persisted and later rendered in every viewer's local timezone —
+// any clock embedded in the text itself must be unambiguous UTC
+const utcClock = (sec) => `${new Date(sec * 1000).toISOString().slice(11, 19)} UTC`;
 
 const dep = JSON.parse(readFileSync(new URL("../contracts/deployments.real.json", import.meta.url), "utf8"));
 const BEACON = "r4vEYPxYkEWzoEySUETDRgnUKu8GG9b1GN";
@@ -286,7 +289,7 @@ app.post("/api/vaults/:addr/funded", async (req, res) => {
               journalMeta(addr, { pendingMint: meta2.pendingMint });
               persist();
               const waitNote = meta2.pendingMint.executionAllowedAt
-                ? ` Protocol allows execution at ${new Date(meta2.pendingMint.executionAllowedAt * 1000).toLocaleTimeString()}.`
+                ? ` Protocol allows execution at ${utcClock(meta2.pendingMint.executionAllowedAt)}.`
                 : "";
               rec(addr, "mintPending", `Payment received by the protocol — minting is deferred by FAssets limits. The keeper retries with the same proof; no second payment is needed.${waitNote}`, { txFlare: tx.hash, round: proof.meta.round, tone: "warn" });
               return;
@@ -382,7 +385,7 @@ app.post("/api/vaults/:addr/claim", async (req, res) => {
         });
         const stx = await v.attestSilence(proof);
         await stx.wait();
-        rec(addr, "silence", `Silence attested through ${new Date(Number(await v.silenceProvenThroughTs()) * 1000).toLocaleTimeString()}`, { txFlare: stx.hash, round: proof.meta.round, tone: "warn" });
+        rec(addr, "silence", `Silence attested through ${utcClock(Number(await v.silenceProvenThroughTs()))}`, { txFlare: stx.hash, round: proof.meta.round, tone: "warn" });
       }
       const ctx = await v.startClaim(beneficiaryXrpl);
       await ctx.wait();
@@ -877,12 +880,16 @@ async function checkpointScan() {
       const nowTs = Math.floor(Date.now() / 1000);
       // only meaningful once real silence has accumulated beyond the interval
       if (nowTs - Number(lastTs) < CHECKPOINT_SEC || nowTs - Number(provenTs) < CHECKPOINT_SEC) continue;
+      const cfg = await vaultConfig(v);
+      // startClaim only ever needs coverage through lastHeartbeat + period + grace;
+      // past that fixed deadline every further checkpoint is pure gas burn, and an
+      // abandoned Active vault would otherwise be attested forever
+      if (Number(provenTs) >= Number(lastTs) + Number(cfg.heartbeatPeriod) + Number(cfg.gracePeriod)) continue;
       ckpt.lastAttemptAt = nowMs; persist();
       runJob(key, "checkpoint", async () => {
         try {
           const nowL = await validatedLedger();
           const minLedger = Number(await v.nextSilenceLedger());
-          const cfg = await vaultConfig(v);
           rec(key, "checkpoint", "Rolling silence checkpoint — chaining a proof segment before the attestation window slides away", { tone: "warn" });
           const proof = await proveSilence(agent, {
             beacon: BEACON, reference: cfg.heartbeatReference, ownerAddress: meta.ownerXrpl,
@@ -893,7 +900,7 @@ async function checkpointScan() {
           ckpt.lastSuccessAt = Date.now(); ckpt.failures = 0; ckpt.nextRetryAt = 0;
           meta.lastCkptAt = Date.now(); // legacy mirror: a rollback stays sane
           persist();
-          rec(key, "silence", `Checkpoint attested — silence proven through ${new Date(Number(await v.silenceProvenThroughTs()) * 1000).toLocaleTimeString()}`, { txFlare: stx.hash, round: proof.meta.round, tone: "warn" });
+          rec(key, "silence", `Checkpoint attested — silence proven through ${utcClock(Number(await v.silenceProvenThroughTs()))}`, { txFlare: stx.hash, round: proof.meta.round, tone: "warn" });
         } catch (e) {
           ckpt.failures = (ckpt.failures ?? 0) + 1;
           ckpt.nextRetryAt = Date.now() + Math.min(60_000 * 2 ** ckpt.failures, 3_600_000);
