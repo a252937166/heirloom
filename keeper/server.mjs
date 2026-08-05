@@ -124,6 +124,7 @@ const journalMeta = (addr, patch) => journal({ type: "meta", vault: addr.toLower
 function rec(vaultAddr, kind, label, extra = {}) {
   const v = (store.vaults[vaultAddr.toLowerCase()] ??= { events: [], meta: {} });
   const event = { at: Math.floor(Date.now() / 1000), kind, label, ...extra };
+  if (extra.txFlare) store.lastWriteAt = event.at; // readiness signal: a Flare tx hash means a write landed
   v.events.push(event);
   journal({ type: "event", vault: vaultAddr.toLowerCase(), event });
   persist();
@@ -174,7 +175,38 @@ function createAllowed(ip) {
 
 let BUILD_SHA = "dev";
 try { BUILD_SHA = readFileSync(new URL("../BUILD_SHA", import.meta.url), "utf8").trim(); } catch { /* dev run */ }
-app.get("/api/health", (_req, res) => res.json({ ok: true, build: BUILD_SHA, factory: dep.factory, beacon: BEACON, at: Date.now() }));
+
+// Readiness, not liveness: the July outage proved a process can be "up" while
+// every write path is dead (crank wallet out of gas). Health now answers the
+// question judges actually care about — can this keeper still submit proofs?
+const MIN_WRITE_WEI = 1n * 10n ** 18n; // below 1 C2FLR cranks start failing on fee caps
+const LOW_GAS_WEI = 10n * 10n ** 18n; // early warning, ~1 day of checkpoint headroom
+const lastWriteAt = () => store.lastWriteAt
+  ?? Math.max(0, ...Object.values(store.vaults).flatMap((v) => (v.events ?? []).filter((e) => e.txFlare).map((e) => e.at)));
+const lastCheckpointAt = () =>
+  Math.floor(Math.max(0, ...Object.values(store.vaults).map((v) => v.meta?.ckpt?.lastSuccessAt ?? 0)) / 1000);
+let _health = { at: 0, v: null, code: 200 };
+app.get("/api/health", async (_req, res) => {
+  if (_health.v && Date.now() - _health.at < 15_000) return res.status(_health.code).json(_health.v);
+  let balanceWei = null, latestBlock = null, blockAgeSec = null;
+  try {
+    const [bal, blk] = await Promise.all([provider.getBalance(agent.address), provider.getBlock("latest")]);
+    balanceWei = bal; latestBlock = blk.number; blockAgeSec = Math.max(0, Math.floor(Date.now() / 1000) - blk.timestamp);
+  } catch { /* readReady stays false */ }
+  const readReady = latestBlock != null && blockAgeSec < 120;
+  const writeReady = readReady && balanceWei != null && balanceWei >= MIN_WRITE_WEI;
+  const v = {
+    ok: readReady && writeReady, readReady, writeReady,
+    build: BUILD_SHA, factory: dep.factory, beacon: BEACON,
+    keeper: agent.address, keeperBalanceWei: balanceWei == null ? null : String(balanceWei),
+    lowGas: balanceWei != null && balanceWei < LOW_GAS_WEI,
+    latestBlock, latestBlockAgeSec: blockAgeSec,
+    lastSuccessfulWriteAt: lastWriteAt(), lastCheckpointSuccessAt: lastCheckpointAt(),
+    at: Date.now(),
+  };
+  _health = { at: Date.now(), v, code: v.ok ? 200 : 503 };
+  res.status(_health.code).json(v);
+});
 
 // direct-mint quote: protocol-exact drops computed from the AssetManager's
 // LIVE direct-minting settings, paid to the live directMintingPaymentAddress().
@@ -184,6 +216,11 @@ app.get("/api/direct-mint/quote", async (req, res) => {
     const lots = Math.max(1, Math.min(10, Number(req.query.lots ?? 2)));
     const netUBA = BigInt(lots) * BigInt(dep.lotSizeUBA);
     const s = await mintSettings();
+    if (s.source !== "asset-manager") {
+      // an XRPL payment is irreversible — never issue payment instructions from
+      // static settings; the fallback exists for diagnostics, not for paying
+      return res.status(503).json({ payable: false, source: s.source, error: "live protocol quote unavailable — retry in a moment" });
+    }
     const grossUBA = grossForNet(netUBA, s);
     res.json({
       quoteId: hexlify(randomBytes(8)),
@@ -227,6 +264,12 @@ app.post("/api/vaults", async (req, res) => {
     if (!/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(beneficiaryXrpl ?? "")) {
       return res.status(400).send("beneficiaryXrpl must be a valid XRPL classic address");
     }
+    // funding instructions come from LIVE settings — fail fast before the vault
+    // exists on-chain rather than hand out a payment address we cannot vouch for
+    const s = await mintSettings();
+    if (s.source !== "asset-manager") {
+      return res.status(503).json({ payable: false, source: s.source, error: "live protocol settings unavailable — vault creation paused, retry in a moment" });
+    }
     const reference = hexlify(randomBytes(32));
     const nowL = await validatedLedger();
     const ZERO32 = "0x" + "00".repeat(32);
@@ -241,9 +284,9 @@ app.post("/api/vaults", async (req, res) => {
     const ev = rc.logs.map((l) => { try { return factory.interface.parseLog(l); } catch { return null; } }).find((p) => p?.name === "VaultCreated");
     const vault = ev.args.vault;
     const meta = metaOf(vault);
-    // protocol-exact gross from live settings; remember the quote-time payment
-    // address so the funding scan keeps working even if Flare rotates it
-    const s = await mintSettings();
+    // protocol-exact gross from the live settings fetched above; remember the
+    // quote-time payment address so the funding scan keeps working even if
+    // Flare rotates it
     const gross = grossForNet(BigInt(lots) * BigInt(dep.lotSizeUBA), s);
     Object.assign(meta, { ownerXrpl: evmMode ? null : ownerXrpl, ownerEvm: evmMode ? ownerEvm : null, mode: evmMode ? "evm" : "xrpl", beneficiaryXrpl, reference, createdTx: tx.hash, paymentAddress: s.paymentAddress, grossDrops: String(gross) });
     journalMeta(vault, { ownerXrpl: meta.ownerXrpl, ownerEvm: meta.ownerEvm, mode: meta.mode, beneficiaryXrpl, reference, createdTx: tx.hash, paymentAddress: meta.paymentAddress, grossDrops: meta.grossDrops });

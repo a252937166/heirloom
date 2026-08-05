@@ -20,6 +20,14 @@ Chronology (see `git log` for the full record):
    ends fully reconciled: funding → heartbeat → staticCall early-claim drill (blocked, SilenceNotProven) →
    silence proof → challenge + 180s veto-proof grace → FULL-balance FAssets redemption → 10.025312 XRP on the
    beneficiary's wallet → final balance 0.
+6. **Post-freeze hardening (soak-test findings, no product-surface changes)** — a two-week unattended run
+   exposed real operational gaps and each got a root-cause fix: rolling checkpoints now stop once silence
+   coverage reaches the claim deadline (two abandoned vaults had drained the crank wallet); `/api/health`
+   reports write-readiness (keeper address, gas balance, RPC freshness, last successful write) instead of
+   bare liveness; quotes and vault creation refuse to issue payment instructions from static fallback
+   settings; multi-request redemptions only show "delivered" when EVERY payment reference has settled;
+   event-text clocks are UTC; the spike lockfile resolves from the registry so a clean clone reproduces
+   (enforced in CI). A fresh full lifecycle was re-run end-to-end on the live stack after the fixes.
 
-Frozen submission state: tag `submission-v4` — the tag's commit is the single source of truth and is shown verbatim in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
+Frozen submission state: tag `submission-v5` — the tag's commit is the single source of truth and is shown verbatim in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
 `node spike/build-case.mjs` (defaults to the canonical v4 vault `0x35975770e1eD5431e0bFCaBB238B6188c94AeAdA`), then validate with `node spike/validate-case.mjs`.
