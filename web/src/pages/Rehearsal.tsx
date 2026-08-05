@@ -231,7 +231,7 @@ export function Rehearsal() {
             too. Then come back and bind the vault address (it is the tail of your plan page's URL).
           </p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
-            <input placeholder="0x… vault address" value={vaultInput} onChange={(e) => setVaultInput(e.target.value.trim())} style={{ minWidth: 300 }} />
+            <input name="rehearsal-vault" aria-label="Vault address" placeholder="0x… vault address" value={vaultInput} onChange={(e) => setVaultInput(e.target.value.trim())} style={{ minWidth: 300 }} />
             <button className="btn btn-primary" onClick={() => bindVault(vaultInput)}>Bind this plan</button>
           </div>
           {myPlans.length > 0 && (
