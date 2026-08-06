@@ -722,10 +722,16 @@ async function beaconScan() {
         const seen2 = ((store.vaults[key2] ??= { events: [], meta: {} }).meta.seenHb ??= []);
         const hash2 = tx.hash ?? t.hash;
         if (seen2.includes(hash2)) continue;
-        seen2.push(hash2); persist();
+        // the owner's cancel is their exit — it must survive a timed-out proof,
+        // a keeper restart mid-job, anything short of the vault actually leaving
+        // Active. Same self-healing contract as funding and heartbeats.
+        const cAttempts = (store.vaults[key2].meta.cancelAttempts ??= {});
+        const ca = cAttempts[hash2] ?? { n: 0, at: 0 };
+        if (ca.n >= 5 || Date.now() - ca.at < 60_000) continue;
         if (!jobs.get(key2)) {
+          cAttempts[hash2] = { n: ca.n + 1, at: Date.now() }; persist();
           runJob(vaultAddr, "cancel", async () => {
-            rec(vaultAddr, "cancelSeen", "Cancel command detected on the beacon — proving it", { txXrpl: hash2, tone: "warn" });
+            rec(vaultAddr, "cancelSeen", `Cancel command detected on the beacon — proving it${ca.n ? ` · retry ${ca.n + 1}/5` : ""}`, { txXrpl: hash2, tone: "warn" });
             const proof = await proveXrpPayment(agent, hash2);
             const v = vaultAt(vaultAddr);
             const ownerXrpl = store.vaults[key2]?.meta?.ownerXrpl;
@@ -735,6 +741,7 @@ async function beaconScan() {
             rec(vaultAddr, "cancelled", "Plan cancelled — the vault is redeeming everything back to the owner's XRPL wallet", { txFlare: ctx.hash, tone: "gold" });
             // cancel redemptions get the same tracking as release redemptions:
             // "returning" vs "returned" must be provable, not assumed
+            seen2.push(hash2); delete cAttempts[hash2]; persist(); // cancelled on-chain — stop retrying
             const creqs = parseRedemptionRequests(rcx);
             if (creqs.length) {
               const cmeta = metaOf(vaultAddr);
