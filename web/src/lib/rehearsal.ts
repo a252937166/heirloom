@@ -26,7 +26,7 @@ export interface RehearsalSession {
   runId: string;
   startedAt: number;
   vault?: string; // set once the plan exists; verification anchors to it
-  mode?: "gemwallet" | "manual";
+  mode?: "gemwallet" | "evm" | "manual";
   // recorded at bind time: the difference between "this run did it" and
   // "history already had it" is judged against this baseline, never guessed
   runType?: RunType;

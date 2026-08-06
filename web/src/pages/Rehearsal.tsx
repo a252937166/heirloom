@@ -64,7 +64,7 @@ function fmtClock(sec: number) {
 
 export function Rehearsal() {
   const [params] = useSearchParams();
-  const { wallet, openConnect } = useWallet();
+  const { wallet, evm, openConnect } = useWallet();
   const [session, setSession] = useState<RehearsalSession | null>(() => loadSession());
   const [vaultInput, setVaultInput] = useState("");
   const [bindErr, setBindErr] = useState<string | null>(null);
@@ -85,13 +85,16 @@ export function Rehearsal() {
     if (qv && /^0x[0-9a-fA-F]{40}$/.test(qv)) setVaultInput(qv);
   }, [params]);
 
-  // a connected GemWallet completes the wallet step by evidence, not by click
+  // a connected wallet completes this step by evidence, not by click — either
+  // ledger counts: XRPL is the flagship path, EVM-owner mode is a supported one
   useEffect(() => {
-    if (!session || session.steps.wallet || !wallet.address) return;
+    if (!session || session.steps.wallet) return;
+    const addr = wallet.address ?? evm.address;
+    if (!addr) return;
     const cur = fresh();
     if (!cur || cur.steps.wallet) return;
-    update(markDone({ ...cur, mode: "gemwallet" }, "wallet", wallet.address));
-  }, [wallet.address, session, update, fresh]);
+    update(markDone({ ...cur, mode: wallet.address ? "gemwallet" : "evm" }, "wallet", addr));
+  }, [wallet.address, evm.address, session, update, fresh]);
 
   // plans owned by the connected wallet — the cheap way to bind without pasting
   useEffect(() => {
@@ -229,7 +232,8 @@ export function Rehearsal() {
             No funded Testnet account yet? The{" "}
             <a href="https://xrpl.org/resources/dev-tools/xrp-faucets" target="_blank" rel="noreferrer">official XRPL faucet ↗</a>{" "}
             can generate one — import that test-only account into a Testnet-capable wallet, and never reuse its
-            seed on Mainnet.
+            seed on Mainnet. A MetaMask/OKX wallet also counts here: EVM-owner mode is the alternative setup,
+            with one-click check-ins on Coston2.
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
             <button className="btn btn-primary" onClick={openConnect}>Connect a wallet</button>
