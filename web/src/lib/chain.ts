@@ -48,6 +48,7 @@ export interface VaultView {
   beneficiaryXrplHash: string;
   ownerEvm: string;
   vetoProofGrace: number;
+  creationTs: number;
 }
 
 // older vaults predate newer config fields — decode tolerantly (v4 → v3 → v2)
@@ -113,6 +114,7 @@ export async function readVault(address: string): Promise<VaultView> {
     beneficiaryXrplHash: cfg.beneficiaryXrplHash,
     ownerEvm: cfg.ownerEvm,
     vetoProofGrace: Number(cfg.vetoProofGrace),
+    creationTs: Number(cfg.creationTs),
   };
 }
 

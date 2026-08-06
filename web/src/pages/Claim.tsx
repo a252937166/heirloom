@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { CONFIG } from "../config";
 import { VaultView, addrHash, fmtFxrp, readVault, short } from "../lib/chain";
 import { Receipt, deriveSettlement } from "../lib/settlement";
@@ -33,6 +33,7 @@ function Stepper({ active }: { active: number }) {
 
 export function Claim() {
   const { address = "" } = useParams();
+  const [search] = useSearchParams();
   const [v, setV] = useState<VaultView | null>(null);
   const [events, setEvents] = useState<KeeperEvent[]>([]);
   const [bene, setBene] = useState("");
@@ -119,13 +120,16 @@ export function Claim() {
   }
 
   // the drill runs a staticCall server-side and reports CHAIN truth —
-  // "blocked as designed" is only ever shown when the contract actually refused
+  // "blocked as designed" is only ever shown when the contract actually refused.
+  // A rehearsal run sheet may hand the beneficiary a link tagged ?rh=<runId>;
+  // passing it through lets the journal bind THIS drill to THAT run.
   async function testEarlyClaim() {
     setDrill("running");
     try {
+      const rh = search.get("rh");
       const r = await fetch(`${CONFIG.api}/vaults/${address}/simulate-early-claim`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ beneficiaryXrpl: bene.trim() }),
+        body: JSON.stringify({ beneficiaryXrpl: bene.trim(), ...(rh && /^rh-[a-z0-9-]{4,40}$/.test(rh) ? { rh } : {}) }),
       });
       if (!r.ok) throw new Error(await r.text());
       setDrill(await r.json());

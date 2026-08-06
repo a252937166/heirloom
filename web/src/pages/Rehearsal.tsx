@@ -5,6 +5,7 @@ import { readVault, short, vaultsOfOwner } from "../lib/chain";
 import {
   REHEARSAL_STEPS, StepId, RehearsalSession,
   loadSession, newSession, saveSession, clearSession, markDone, doneCount, buildReceipt,
+  drillSatisfies, classifyRun, heartbeatSatisfies, DrillEventLike,
 } from "../lib/rehearsal";
 import { useWallet } from "../App";
 import { CopyBtn } from "../components/CopyBtn";
@@ -105,10 +106,18 @@ export function Rehearsal() {
       const v = await readVault(addr);
       const cur = fresh();
       if (!cur) return;
-      let s: RehearsalSession = { ...cur, vault: addr };
-      s = markDone(s, "create", addr);
-      if (v.state >= 2) s = markDone(s, "fund", `state=${STATE_NAMES[v.state]}`);
-      if (v.heartbeatEpoch >= 1) s = markDone(s, "heartbeat", `epoch=${v.heartbeatEpoch}`);
+      // the receipt must never confuse "this run did it" with "history already
+      // had it": classify by creation time and freeze a baseline to judge against
+      const runType = classifyRun(v.creationTs, cur.startedAt);
+      let s: RehearsalSession = {
+        ...cur, vault: addr, runType,
+        baseline: { state: v.state, heartbeatEpoch: v.heartbeatEpoch, creationTs: v.creationTs, boundAt: Math.floor(Date.now() / 1000) },
+      };
+      s = markDone(s, "create", runType === "fresh-plan" ? addr : `${addr} · pre-existing plan`);
+      if (v.state >= 2) s = markDone(s, "fund", runType === "fresh-plan" ? `state=${STATE_NAMES[v.state]}` : `state=${STATE_NAMES[v.state]} · pre-existing`);
+      // fresh plans: any proven epoch counts; existing plans start un-earned —
+      // the epoch must GROW during the rehearsal (the poll below watches for it)
+      if (runType === "fresh-plan" && v.heartbeatEpoch >= 1) s = markDone(s, "heartbeat", `epoch=${v.heartbeatEpoch}`);
       setVaultState(v.state);
       update(s);
     } catch {
@@ -128,14 +137,20 @@ export function Rehearsal() {
       let s = cur;
       const v = await readVault(cur.vault);
       setVaultState(v.state);
+      const runType = s.runType ?? "fresh-plan";
+      const baselineEpoch = s.baseline?.heartbeatEpoch ?? 0;
       if (!s.steps.fund && v.state >= 2) s = markDone(s, "fund", `state=${STATE_NAMES[v.state]}`);
-      if (!s.steps.heartbeat && v.heartbeatEpoch >= 1) s = markDone(s, "heartbeat", `epoch=${v.heartbeatEpoch}`);
+      if (!s.steps.heartbeat && heartbeatSatisfies(v.heartbeatEpoch, runType, baselineEpoch)) {
+        s = markDone(s, "heartbeat", runType === "fresh-plan" ? `epoch=${v.heartbeatEpoch}` : `epoch ${baselineEpoch}→${v.heartbeatEpoch} during this run`);
+      }
       if (!s.steps.drill && s.steps.heartbeat) {
         const r = await fetch(`${CONFIG.api}/vaults/${cur.vault}`);
         if (r.ok) {
-          const evs: KeeperEvent[] = (await r.json()).events ?? [];
-          const hit = evs.find((e) => e.kind === "drill" && e.at >= s.startedAt && /blocked/i.test(e.label));
-          if (hit) s = markDone(s, "drill", `${fmtClock(hit.at)} · ${hit.label.slice(0, 80)}`);
+          const evs: DrillEventLike[] = (await r.json()).events ?? [];
+          // verdict is structural (Active vault + SilenceNotProven + this run) —
+          // a friendly "blocked" on a settled plan can never complete the drill
+          const hit = evs.find((e) => drillSatisfies(e, s));
+          if (hit) s = markDone(s, "drill", `${fmtClock(hit.at)} · SilenceNotProven refused in a live-chain staticCall${hit.rh ? " · run-tagged" : ""}`);
         }
       }
       if (s !== cur) update(s);
@@ -186,12 +201,13 @@ export function Rehearsal() {
         <p style={{ maxWidth: 640, marginBottom: 8 }}>
           The Recovery Kit tells you to <em>rehearse the claim once, together, today</em>. This run sheet walks an
           owner and their beneficiary through the whole path on testnet — funding, heartbeat, the early-claim
-          drill the chain must refuse — and hands you a receipt at the end. Everything runs on free test XRP:
-          nothing real is at stake, ever.
+          drill the chain must refuse — and hands you a receipt at the end. It runs only on Coston2 and the
+          XRPL Testnet, on free test XRP — no real assets are used.
         </p>
         <p className="hint" style={{ fontSize: "0.8rem", color: "var(--mist-2)", maxWidth: 640, marginBottom: 20 }}>
-          Honest scoring: five of the seven checks flip only on chain or keeper evidence; the two that cannot be
-          verified (handing over the Kit, the debrief) say "self-attested" on the receipt.
+          Honest scoring: four checks flip only on chain or keeper evidence, the wallet step is evidenced by
+          your local session, and the two interpersonal steps (handing over the Kit, the debrief) say
+          "self-attested" on the receipt.
         </p>
         <button className="btn btn-primary" onClick={() => setSession(newSession())}>Start a rehearsal</button>
         <Link to="/case/001" className="btn btn-ghost" style={{ marginLeft: 10 }}>Watch the finished case first</Link>
@@ -210,9 +226,10 @@ export function Rehearsal() {
             Install <a href="https://gemwallet.app" target="_blank" rel="noreferrer">GemWallet ↗</a> and press{" "}
             <strong>"Connect Wallet"</strong> (top right), then use the account menu's one-click test-XRP faucet.
             Any other XRPL wallet works too — every payment in this app is also shown as copyable instructions.
-            No wallet at all? The{" "}
+            No funded Testnet account yet? The{" "}
             <a href="https://xrpl.org/resources/dev-tools/xrp-faucets" target="_blank" rel="noreferrer">official XRPL faucet ↗</a>{" "}
-            can generate a funded test account for the manual path.
+            can generate one — import that test-only account into a Testnet-capable wallet, and never reuse its
+            seed on Mainnet.
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
             <button className="btn btn-primary" onClick={openConnect}>Connect a wallet</button>
@@ -296,22 +313,31 @@ export function Rehearsal() {
     drill: {
       title: "Beneficiary runs the early-claim drill",
       who: "BENEFICIARY",
-      verified: "verified when the keeper journal records the on-chain refusal (SilenceNotProven)",
+      verified: "verified when the keeper's public journal records THIS run's live-chain staticCall refusal (SilenceNotProven, on an Active plan)",
       instruction: (
         <>
           <div className="notice warn" style={{ marginBottom: 10 }}>
-            <strong>Beneficiary's move.</strong> Hand them the screen — or send them the claim link from the Kit.
+            <strong>Beneficiary's move.</strong> Hand them the screen — or send them the tagged claim link below.
             Nothing on that page can rush the plan; that is the point of the drill.
           </div>
           <p>
             On the claim page they enter their XRPL address and press <strong>"Test early-claim protection"</strong>.
-            The contract must refuse while you are alive — that refusal, recorded on-chain, is the product working.
+            The contract refuses in a live-chain <span className="mono">staticCall</span> — no transaction is
+            broadcast, no funds move — and the keeper records the refusal in its public journal. Only a{" "}
+            <span className="mono">SilenceNotProven</span> refusal on an <strong>Active</strong> plan completes
+            this step; friendly refusals on settled plans do not count.
           </p>
+          {vaultState != null && vaultState >= 3 && (
+            <div className="notice err" style={{ marginTop: 8 }}>
+              This plan is past Active ({STATE_NAMES[vaultState]}) — the safety drill cannot run on it. Bind a
+              fresh plan (or an Active one) to rehearse the refusal for real.
+            </div>
+          )}
           {session.vault && (
-            <p className="mono" style={{ fontSize: "0.78rem", marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
-              {`${location.origin}/claim/${short(session.vault, 8)}`}
-              <CopyBtn text={`${location.origin}/claim/${session.vault}`} />
-              <a href={`/claim/${session.vault}`} target="_blank" rel="noreferrer">open ↗</a>
+            <p className="mono" style={{ fontSize: "0.78rem", marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {`${location.origin}/claim/${short(session.vault, 8)}?rh=…`}
+              <CopyBtn text={`${location.origin}/claim/${session.vault}?rh=${session.runId}`} />
+              <a href={`/claim/${session.vault}?rh=${session.runId}`} target="_blank" rel="noreferrer">open ↗</a>
             </p>
           )}
         </>
@@ -362,12 +388,13 @@ export function Rehearsal() {
       <p className="mono" style={{ fontSize: "0.66rem", letterSpacing: "0.14em", color: "var(--mist-2)" }}>REHEARSE THE HANDOVER</p>
       <h1 style={{ margin: "6px 0 8px" }}>The rehearsal run sheet</h1>
       <p style={{ maxWidth: 660, marginBottom: 6 }}>
-        Owner and beneficiary, together, on testnet. Five checks flip only on chain or keeper evidence — your
-        clicks cannot fake them.
+        Owner and beneficiary, together, on testnet. Four checks flip only on chain or keeper evidence, one on
+        your local wallet session — clicks cannot fake them; the two interpersonal steps are honestly
+        self-attested.
       </p>
       <p className="mono" style={{ fontSize: "0.72rem", color: "var(--mist-2)", marginBottom: 18 }}>
         run {session.runId} · started {fmtClock(session.startedAt)} · {doneCount(session)}/{REHEARSAL_STEPS.length} complete
-        {session.vault && <> · plan {short(session.vault, 6)} {vaultState != null && <>({STATE_NAMES[vaultState]})</>}</>}
+        {session.vault && <> · plan {short(session.vault, 6)} {vaultState != null && <>({STATE_NAMES[vaultState]})</>}{session.runType && <> · {session.runType}</>}</>}
         {checkedAt && <> · evidence checked {fmtClock(checkedAt)}{checking ? "…" : ""}</>}
         {" · "}
         <button className="btn btn-ghost" style={{ padding: "1px 8px", fontSize: "0.7rem" }} onClick={verify} disabled={checking || !session.vault}>Check now</button>
@@ -429,9 +456,9 @@ export function Rehearsal() {
             <Link to="/case/001" className="btn btn-ghost">See a plan that went all the way</Link>
           </div>
           <p className="hint" style={{ fontSize: "0.74rem", color: "var(--mist-2)", marginTop: 10 }}>
-            The receipt is plain JSON: run id, per-step timestamps and evidence, total time, debrief answers.
-            Send it to the team if you're helping us test — it is exactly the "N pairs rehearsed unassisted"
-            evidence, and it contains nothing private.
+            The receipt is a participant-held JSON record — run id and type, per-step timestamps and evidence,
+            total time, debrief answers — not a cryptographic proof. It contains public wallet/vault references
+            and your answers: share it deliberately. Send it to the team if you're helping us test.
           </p>
         </div>
       )}

@@ -82,8 +82,9 @@ beneficiary's wallet ◀─── real XRP
    measured by consensus time — a simpler model, honestly labelled) — or paste any funded testnet address. The keeper
    deploys **your own vault** on Coston2 → fund it with the one displayed XRPL payment → watch FXRP arrive
    and the dial go live. Send a heartbeat; open the beneficiary view and try to claim early — watch the chain refuse.
-   Doing it as a pair? [/rehearsal](https://heirloom.axiqo.xyz/rehearsal) is the two-person run sheet: seven steps,
-   five verified purely by chain/keeper evidence, ending in a downloadable rehearsal receipt.
+   Doing it as a pair? [/rehearsal](https://heirloom.axiqo.xyz/rehearsal) is the two-person run sheet: seven
+   steps — four verified purely on chain/keeper evidence, one on the local wallet session, two explicitly
+   self-attested — ending in a participant-held rehearsal receipt.
 3. **Deep:** contracts in [`contracts/`](contracts/) (19 unit tests incl. adversarial, veto-race and partial-redemption suites), proof mechanics in [`spike/`](spike/) (gate scripts with saved on-chain artifacts), keeper in [`keeper/`](keeper/), threat model in [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
 Demo timing note: heartbeat periods are minutes on testnet so the full story is visible in one sitting; production timing would be 90–180 days with 7-day rolling checkpoints: the ~14-day attestation depth was measured, the chaining is contract-enforced, and the keeper now runs a checkpoint scheduler (compressed interval on testnet) that chains proof segments automatically before the window slides away.

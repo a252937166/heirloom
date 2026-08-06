@@ -76,6 +76,10 @@ App: the **Live Case Dashboard** (`/case/001`) replays one real completed lifecy
 
 Everything — first commit to live product during Flare Summer Signal (July 2026): contracts, keeper, web app, and the on-chain gate scripts that de-risked each primitive (all saved with their proofs in the repo).
 
+## User validation
+
+The product ships a two-person **rehearsal run sheet** (https://heirloom.axiqo.xyz/rehearsal): seven steps for an owner–beneficiary pair, four completion-checked purely against chain/keeper evidence, one against the local wallet session, two explicitly self-attested — ending in a participant-held receipt. The protocol lifecycle has scripted end-to-end verification on the live stack; the rehearsal UI has undergone a documented persona-based walkthrough, and its evidence-verdict logic is unit-tested. **We claim no human-subject numbers** — run the rehearsal as a pair and hold the receipt yourself.
+
 ## Honest boundaries
 
 Heirloom never holds keys, cannot change the recipient, and cannot release before inactivity + challenge have both elapsed. Settlement relies on Flare FAssets, FDC consensus, and XRPL; the payout is a public transaction. It is a technical continuity mechanism, not a legal will. Full THREAT_MODEL in the repo (fake-liveness, premature claim, window cheating, keeper death, redemption defaults, dust, privacy).
@@ -85,15 +89,7 @@ Heirloom never holds keys, cannot change the recipient, and cannot release befor
 Mainnet with 90–180-day periods and 7-day rolling checkpoints · lost-key self-recovery (same primitive, second product) · multi-beneficiary value splits (FTSO-priced) · FBTC/FDOGE as FAssets expand — the continuity layer for all FAssets.
 ```
 
-## User validation（诚实措辞——Details 里用这段，绝不写编造的人数）
-
-> User validation: the product ships a two-person rehearsal surface
-> (https://heirloom.axiqo.xyz/rehearsal) whose seven steps are completion-checked
-> against chain/keeper evidence and end in a downloadable receipt. A scripted
-> end-to-end run is included as flow verification. We claim no human-subject
-> numbers — judges can run the rehearsal as a pair and hold the receipt themselves.
-
-（若截止前收到真人演练收据，再把真实数字加回：`N pairs · median X min · drill refusals on-chain`。）
+> 运营备注：User validation 已在上方 Details 围栏**内**（复制时自动带上）。绝不写编造的人数；若截止前收到真人演练收据，把真实数字加回该段：`N pairs · median X min · drill refusals (live-chain staticCall)`，并严格区分 guided / unassisted。AI 模拟运行只能标注为 disclosed AI-persona run，不得计入 pairs。
 
 ## 评委可测清单（Details 末尾或 comment 区可补）
 

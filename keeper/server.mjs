@@ -538,17 +538,34 @@ const VAULT_ERRORS = new Interface([
 // P0: the early-claim drill must report chain truth — a staticCall against
 // startClaim returns exactly why (or whether) the contract refuses. Nothing
 // is ever executed by this endpoint.
+// per-state drill semantics: the staticCall is evaluated against LIVE chain
+// state but broadcasts nothing — the result lands in this journal, and the
+// structured fields (drillStage/vaultState/reason) are what run sheets judge;
+// prose is for humans, never for verdicts.
+const DRILL_STAGE = { 2: "owner-active-window", 3: "challenge", 4: "releasing", 5: "released", 6: "cancelled", 7: "cancelling" };
+const DRILL_SENTENCE = {
+  3: "a claim already entered its challenge window — one owner heartbeat still vetoes it",
+  4: "a redemption is already in progress — the claim moved past the drill",
+  5: "this plan already paid its beneficiary — every claim path is closed",
+  6: "this plan was cancelled by its owner — nothing is claimable",
+  7: "the cancel redemption is still returning funds to the owner — nothing is claimable",
+};
 app.post("/api/vaults/:addr/simulate-early-claim", async (req, res) => {
   const { beneficiaryXrpl } = req.body ?? {};
   if (!beneficiaryXrpl) return res.status(400).send("beneficiaryXrpl required");
+  // optional run-sheet tag, echoed into the journal so a rehearsal can bind
+  // THIS drill to THIS run — sanitized, and never trusted for anything else
+  const rh = typeof req.body?.rh === "string" && /^rh-[a-z0-9-]{4,40}$/.test(req.body.rh) ? req.body.rh : undefined;
   try {
     const v = vaultAt(req.params.addr);
     const [state, deadline] = await Promise.all([v.state(), v.silenceDeadline()]);
+    const st = Number(state);
     const now = Math.floor(Date.now() / 1000);
+    const tag = rh ? { rh } : {};
     try {
       await v.startClaim.staticCall(beneficiaryXrpl);
-      rec(req.params.addr, "drill", "Early-claim drill: the inactivity window has elapsed — a real claim could start now (nothing was executed)", { tone: "warn" });
-      return res.json({ blocked: false, stage: "window-open", reason: "SILENCE_WINDOW_ELAPSED", fundsMoved: "0" });
+      rec(req.params.addr, "drill", "Early-claim drill: the inactivity window has elapsed — a real claim could start now (nothing was executed)", { tone: "warn", drillStage: "window-open", vaultState: st, ...tag });
+      return res.json({ blocked: false, stage: "window-open", reason: "SILENCE_WINDOW_ELAPSED", vaultState: st, fundsMoved: "0", ...tag });
     } catch (e) {
       let reason = null;
       const data = e.data ?? e.info?.error?.data;
@@ -557,26 +574,26 @@ app.post("/api/vaults/:addr/simulate-early-claim", async (req, res) => {
         const m = String(e.shortMessage ?? e.message);
         reason = /SilenceNotProven|ChallengeNotOver|BadState|NotBeneficiary/.exec(m)?.[0] ?? "REVERTED";
       }
-      // terminal states deserve a human sentence, not a bare enum: judges poke
-      // the drill on the settled showcase vault and should read product, not jargon
-      const terminal = Number(state) >= 5;
+      const stage = DRILL_STAGE[st] ?? "silence-proof";
+      const sentence = DRILL_SENTENCE[st];
       rec(req.params.addr, "drill",
-        terminal
-          ? "Early-claim drill: blocked — the plan already settled, nothing left to claim (funds moved: 0)"
+        sentence
+          ? `Early-claim drill: blocked — ${sentence} (funds moved: 0)`
           : `Early-claim drill: blocked on-chain (${reason}) — funds moved: 0`,
-        { tone: "ok" });
+        { tone: "ok", drillStage: stage, vaultState: st, reason, ...tag });
       return res.json({
         blocked: true,
-        stage: terminal ? "settled" : Number(state) === 3 ? "challenge" : "silence-proof",
+        stage,
         reason,
-        detail: terminal
-          ? "this plan already reached a terminal state — every claim path is closed; run the drill on an Active plan to see the silence-proof refusal"
-          : reason === "SilenceNotProven"
-          ? (now <= Number(deadline)
-              ? "the owner is inside their window — the FDC verifier would answer REFERENCED TRANSACTION EXISTS; the proof cannot even be built"
-              : "no silence attestation has been submitted for this window yet")
-          : undefined,
+        vaultState: st,
+        detail: sentence
+          ?? (reason === "SilenceNotProven"
+            ? (now <= Number(deadline)
+                ? "the owner is inside their window — the FDC verifier would answer REFERENCED TRANSACTION EXISTS; the proof cannot even be built"
+                : "no silence attestation has been submitted for this window yet")
+            : undefined),
         fundsMoved: "0",
+        ...tag,
       });
     }
   } catch (e) {

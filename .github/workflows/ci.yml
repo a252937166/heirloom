@@ -13,6 +13,8 @@ jobs:
         working-directory: web
       - run: npx tsc --noEmit
         working-directory: web
+      - run: npx vitest run
+        working-directory: web
       - run: npx vite build
         working-directory: web
   contracts:
