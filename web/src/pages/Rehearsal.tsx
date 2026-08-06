@@ -186,7 +186,8 @@ export function Rehearsal() {
         <p style={{ maxWidth: 640, marginBottom: 8 }}>
           The Recovery Kit tells you to <em>rehearse the claim once, together, today</em>. This run sheet walks an
           owner and their beneficiary through the whole path on testnet — funding, heartbeat, the early-claim
-          drill the chain must refuse — and hands you a receipt at the end.
+          drill the chain must refuse — and hands you a receipt at the end. Everything runs on free test XRP:
+          nothing real is at stake, ever.
         </p>
         <p className="hint" style={{ fontSize: "0.8rem", color: "var(--mist-2)", maxWidth: 640, marginBottom: 20 }}>
           Honest scoring: five of the seven checks flip only on chain or keeper evidence; the two that cannot be
@@ -209,6 +210,9 @@ export function Rehearsal() {
             Install <a href="https://gemwallet.app" target="_blank" rel="noreferrer">GemWallet ↗</a> and press{" "}
             <strong>"Connect Wallet"</strong> (top right), then use the account menu's one-click test-XRP faucet.
             Any other XRPL wallet works too — every payment in this app is also shown as copyable instructions.
+            No wallet at all? The{" "}
+            <a href="https://xrpl.org/resources/dev-tools/xrp-faucets" target="_blank" rel="noreferrer">official XRPL faucet ↗</a>{" "}
+            can generate a funded test account for the manual path.
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
             <button className="btn btn-primary" onClick={openConnect}>Connect a wallet</button>

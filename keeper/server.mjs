@@ -557,12 +557,21 @@ app.post("/api/vaults/:addr/simulate-early-claim", async (req, res) => {
         const m = String(e.shortMessage ?? e.message);
         reason = /SilenceNotProven|ChallengeNotOver|BadState|NotBeneficiary/.exec(m)?.[0] ?? "REVERTED";
       }
-      rec(req.params.addr, "drill", `Early-claim drill: blocked on-chain (${reason}) — funds moved: 0`, { tone: "ok" });
+      // terminal states deserve a human sentence, not a bare enum: judges poke
+      // the drill on the settled showcase vault and should read product, not jargon
+      const terminal = Number(state) >= 5;
+      rec(req.params.addr, "drill",
+        terminal
+          ? "Early-claim drill: blocked — the plan already settled, nothing left to claim (funds moved: 0)"
+          : `Early-claim drill: blocked on-chain (${reason}) — funds moved: 0`,
+        { tone: "ok" });
       return res.json({
         blocked: true,
-        stage: Number(state) === 3 ? "challenge" : "silence-proof",
+        stage: terminal ? "settled" : Number(state) === 3 ? "challenge" : "silence-proof",
         reason,
-        detail: reason === "SilenceNotProven"
+        detail: terminal
+          ? "this plan already reached a terminal state — every claim path is closed; run the drill on an Active plan to see the silence-proof refusal"
+          : reason === "SilenceNotProven"
           ? (now <= Number(deadline)
               ? "the owner is inside their window — the FDC verifier would answer REFERENCED TRANSACTION EXISTS; the proof cannot even be built"
               : "no silence attestation has been submitted for this window yet")

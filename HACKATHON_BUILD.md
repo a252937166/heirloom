@@ -32,7 +32,9 @@ Chronology (see `git log` for the full record):
    today" as a product surface: a two-person, seven-step guided run where five checks flip only on chain
    or keeper evidence (vault answers, Active state, heartbeat epoch, the recorded on-chain drill refusal)
    and the two that cannot be verified say "self-attested". Ends in a downloadable JSON receipt — the
-   evidence behind "N owner–beneficiary pairs rehearsed unassisted".
+   evidence behind "N owner–beneficiary pairs rehearsed unassisted". A persona-based cognitive walkthrough
+   then hardened the novice funnel (free-test-XRP reassurance, a no-wallet faucet path, a human sentence
+   for drills on already-settled plans).
 
-Frozen submission state: tag `submission-v6` — the tag's commit is the single source of truth and is shown verbatim in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
+Frozen submission state: tag `submission-v7` — the tag's commit is the single source of truth and is shown verbatim in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
 `node spike/build-case.mjs` (defaults to the canonical v4 vault `0x35975770e1eD5431e0bFCaBB238B6188c94AeAdA`), then validate with `node spike/validate-case.mjs`.

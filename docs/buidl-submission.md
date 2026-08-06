@@ -85,9 +85,20 @@ Heirloom never holds keys, cannot change the recipient, and cannot release befor
 Mainnet with 90–180-day periods and 7-day rolling checkpoints · lost-key self-recovery (same primitive, second product) · multi-beneficiary value splits (FTSO-priced) · FBTC/FDOGE as FAssets expand — the continuity layer for all FAssets.
 ```
 
+## User validation（诚实措辞——Details 里用这段，绝不写编造的人数）
+
+> User validation: the product ships a two-person rehearsal surface
+> (https://heirloom.axiqo.xyz/rehearsal) whose seven steps are completion-checked
+> against chain/keeper evidence and end in a downloadable receipt. A scripted
+> end-to-end run is included as flow verification. We claim no human-subject
+> numbers — judges can run the rehearsal as a pair and hold the receipt themselves.
+
+（若截止前收到真人演练收据，再把真实数字加回：`N pairs · median X min · drill refusals on-chain`。）
+
 ## 评委可测清单（Details 末尾或 comment 区可补）
 
 - Live case（60 秒无钱包审计线路）: https://heirloom.axiqo.xyz/case/001
+- Rehearsal（双人演练台，链上判定 + 可下载收据）: https://heirloom.axiqo.xyz/rehearsal
 - Live: https://heirloom.axiqo.xyz （创建自己的金库全程真实交易；GemWallet 优先，MetaMask/OKX 自动加 Coston2）
 - Factory explorer (v4): https://coston2-explorer.flare.network/address/0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f
 - Canonical v4 生命周期与历史 provenance 全部见 README（一个当前案例、一套数字、一条主证据链）
