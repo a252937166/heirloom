@@ -752,11 +752,16 @@ async function beaconScan() {
       if (seen.includes(hash)) continue;
       const vstate = Number(await vaultAt(vaultAddr).state());
       if (vstate >= 4 || vstate === 0) { seen.push(hash); persist(); continue; } // finalized vaults ignore heartbeats
-      seen.push(hash);
-      persist();
+      // self-healing (same lesson the funding scan learned): a timed-out proof
+      // must NOT strand the heartbeat behind a permanent dedup — the hash joins
+      // seenHb only on SUCCESS; failures retry with a cooldown, capped
+      const hbAttempts = (store.vaults[key].meta.hbAttempts ??= {});
+      const a = hbAttempts[hash] ?? { n: 0, at: 0 };
+      if (a.n >= 5 || Date.now() - a.at < 60_000) continue;
       if (!jobs.get(key)) {
+        hbAttempts[hash] = { n: a.n + 1, at: Date.now() }; persist();
         runJob(vaultAddr, "heartbeat-auto", async () => {
-          rec(vaultAddr, "heartbeat", "Heartbeat detected on the beacon — proving it", { txXrpl: hash });
+          rec(vaultAddr, "heartbeat", `Heartbeat detected on the beacon — proving it${a.n ? ` · retry ${a.n + 1}/5` : ""}`, { txXrpl: hash });
           const v = vaultAt(vaultAddr);
           const epochBefore = Number(await v.heartbeatEpoch());
           const proof = await proveXrpPayment(agent, hash);
@@ -772,6 +777,7 @@ async function beaconScan() {
               throw e;
             }
           }
+          seen.push(hash); delete hbAttempts[hash]; persist(); // success ends the retry loop
         }).catch(() => {});
       }
     }
