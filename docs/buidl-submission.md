@@ -89,7 +89,9 @@ Heirloom never holds keys, cannot change the recipient, and cannot release befor
 Mainnet with 90–180-day periods and 7-day rolling checkpoints · lost-key self-recovery (same primitive, second product) · multi-beneficiary value splits (FTSO-priced) · FBTC/FDOGE as FAssets expand — the continuity layer for all FAssets.
 ```
 
-> 运营备注：User validation 已在上方 Details 围栏**内**（复制时自动带上）。绝不写编造的人数；若截止前收到真人演练收据，把真实数字加回该段：`N pairs · median X min · drill refusals (live-chain staticCall)`，并严格区分 guided / unassisted。AI 模拟运行只能标注为 disclosed AI-persona run，不得计入 pairs。
+> 运营备注：User validation 已在上方 Details 围栏**内**（复制时自动带上）。绝不写编造的人数；若截止前收到真人演练收据，把真实数字加回该段：`N pairs · median X min · drill refusals (live-chain staticCall)`，并严格区分 guided / unassisted。
+>
+> **AI 人设运行的红线**：AI 驱动的演练只能标注为 `disclosed AI-persona run`，**永不计入 pairs / users / unassisted 任何人数口径**。它的价值只有两个：①证明流程端到端可跑通（flow verification）②当可用性走查用（发现的摩擦点照常修）。收据里 `runType` 与本地记录都必须能追溯到"这是 AI 跑的"。截止前若一组真人都没有，User validation 段就保持现在这句"不主张人数、评委自己跑"，**不要**用 AI 收据充数。
 
 ## 评委可测清单（Details 末尾或 comment 区可补）
 
