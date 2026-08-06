@@ -270,6 +270,12 @@ export function Rehearsal() {
             </p>
           )}
           {bindErr && <p className="hint" style={{ color: "var(--ember)", marginTop: 8 }}>{bindErr}</p>}
+          {vaultState != null && vaultState >= 4 && (
+            <div className="notice err" style={{ marginTop: 10 }}>
+              That plan already reached {STATE_NAMES[vaultState]} — its story is over, so it can neither take a new
+              heartbeat nor refuse a claim. Bind an <strong>Active</strong> plan (or create one) to rehearse for real.
+            </div>
+          )}
         </>
       ),
     },
@@ -286,14 +292,20 @@ export function Rehearsal() {
       ),
     },
     heartbeat: {
-      title: "Send the first heartbeat",
+      title: session.runType === "existing-plan" ? "Send a heartbeat during this rehearsal" : "Send the first heartbeat",
       who: "OWNER",
-      verified: "verified when heartbeat epoch ≥ 1 on-chain (FDC-proven)",
+      verified: session.runType === "existing-plan"
+        ? `verified when the FDC-proven heartbeat epoch grows past ${session.baseline?.heartbeatEpoch ?? 0} — this plan's history does not count`
+        : "verified when heartbeat epoch ≥ 1 on-chain (FDC-proven)",
       instruction: (
         <p>
           On your plan page press <strong>"I'm here — send heartbeat"</strong> — or send the 1-drop manual payment
           with your reference memo. The keeper spots it on the beacon and proves it to Flare; the dial resets when
-          the proof lands.
+          the proof lands.{" "}
+          {session.runType === "existing-plan" && (
+            <>This plan already existed before the rehearsal, so an <em>earlier</em> heartbeat cannot complete this
+            step — send a fresh one.</>
+          )}
         </p>
       ),
     },
