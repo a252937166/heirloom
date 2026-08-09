@@ -7,6 +7,7 @@ import { Claim } from "./pages/Claim";
 import { Kit } from "./pages/Kit";
 import { CaseStudy } from "./pages/CaseStudy";
 import { Rehearsal } from "./pages/Rehearsal";
+import { Validation } from "./pages/Validation";
 import { WalletModal } from "./components/WalletModal";
 import { FlareMark } from "./components/FlareMark";
 import lockup from "./assets/heirloom-lockup.png";
@@ -203,6 +204,7 @@ export default function App() {
             {[
               { to: "/case/001", match: "/case", icon: "▶", label: "Live case" },
               { to: "/create", match: "/create", icon: "＋", label: "Create a plan" },
+              { to: "/validation", match: "/validation", icon: "✓", label: "Validation" },
             ].map((n) => {
               const active = loc.pathname.startsWith(n.match);
               return (
@@ -359,7 +361,7 @@ export default function App() {
                 onClick={() => setMenuOpen((o) => !o)} style={{ padding: "6px 11px", fontSize: "0.9rem" }}>☰</button>
               {menuOpen && (
                 <div style={{ position: "absolute", right: 0, top: 46, background: "var(--ink-2)", border: "1px solid var(--line)", borderRadius: 12, padding: 10, width: 230, zIndex: 40, boxShadow: "0 18px 60px rgba(0,0,0,.45)" }}>
-                  {[["/case/001", "▶ Live case"], ["/create", "＋ Create a plan"]].map(([to, label]) => (
+                  {[["/case/001", "▶ Live case"], ["/create", "＋ Create a plan"], ["/validation", "✓ Validation"]].map(([to, label]) => (
                     <Link key={to} to={to} className="menu-row" onClick={() => setMenuOpen(false)}
                       style={{ display: "block", padding: "9px 10px", borderRadius: 8, fontSize: "0.85rem", textDecoration: "none", color: "var(--paper)" }}>
                       {label}
@@ -459,6 +461,7 @@ export default function App() {
         <Route path="/claim/:address" element={<Claim />} />
         <Route path="/kit/:address" element={<Kit />} />
         <Route path="/rehearsal" element={<Rehearsal />} />
+        <Route path="/validation" element={<Validation />} />
       </Routes>
       </div>
       <footer className="footer-honest no-print">

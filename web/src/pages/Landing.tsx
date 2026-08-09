@@ -128,6 +128,20 @@ export function Landing() {
         </div>
       </section>
 
+      {/* public product-validation receipt — visible, but never presented as a human count */}
+      <section className="wrap rise" style={{ padding: "0 24px 26px", animationDelay: "0.12s" }}>
+        <Link to="/validation" className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap", textDecoration: "none", borderColor: "color-mix(in srgb, var(--verdant) 28%, var(--line))" }}>
+          <span style={{ minWidth: 0 }}>
+            <span className="eyebrow" style={{ display: "block", color: "var(--verdant)", marginBottom: 6 }}>TEST PERSON 01 · PUBLIC VALIDATION</span>
+            <span style={{ color: "var(--paper)", fontWeight: 700 }}>7/7 completed in 14m 10s · debrief 3/3</span>
+            <span style={{ display: "block", color: "var(--mist-2)", fontSize: "0.76rem", marginTop: 3 }}>
+              Real testnet path · Cancelled · 0 FXRP · refund settled · engineering simulation, not a human count
+            </span>
+          </span>
+          <span className="mono" style={{ fontSize: "0.72rem", color: "var(--lamplight-strong)", whiteSpace: "nowrap" }}>audit the run →</span>
+        </Link>
+      </section>
+
       {/* 3 · the canonical case strip */}
       <section className="wrap rise" style={{ padding: "14px 24px 40px", animationDelay: "0.16s" }}>
         <div className="eyebrow" style={{ marginBottom: 12 }}>A real plan, settled</div>

@@ -210,8 +210,11 @@ input::placeholder { color: var(--mist-2); font-family: var(--font-body); }
 .footer-honest { border-top: 1px solid var(--line); margin-top: 90px; padding: 34px 0 50px; font-size: 0.82rem; color: var(--mist-2); }
 .footer-honest strong { color: var(--mist); }
 
+.validation-receipt-lead { border-right: 1px solid var(--line); padding-right: 28px; }
+
 @media (max-width: 760px) {
   .two-col { grid-template-columns: 1fr !important; }
+  .validation-receipt-lead { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 22px; }
 }
 
 /* print: recovery kit */

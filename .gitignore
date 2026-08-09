@@ -13,3 +13,4 @@ spike/accounts.secret.json
 .DS_Store
 docs/HEIRLOOM-DESIGN.md
 docs/media/
+output/

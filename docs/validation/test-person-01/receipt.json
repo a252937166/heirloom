@@ -1,0 +1,70 @@
+{
+  "kind": "heirloom-rehearsal-receipt",
+  "disclosure": "participant-held receipt — evidence-backed steps cite chain/keeper state; self-attested steps remain self-attested; not a cryptographic proof",
+  "runId": "rh-mslmyc74-3c9xr8",
+  "runType": "fresh-plan",
+  "vault": "0x0FBeF3524E824770E98F2D1A497CB559b007E797",
+  "mode": "manual",
+  "baseline": {
+    "state": 2,
+    "heartbeatEpoch": 0,
+    "creationTs": 1786269951,
+    "boundAt": 1786270188
+  },
+  "startedAt": 1786269858,
+  "completedAt": 1786270708,
+  "totalSeconds": 850,
+  "steps": {
+    "wallet": {
+      "doneAt": 1786269875,
+      "evidence": "manual path"
+    },
+    "create": {
+      "doneAt": 1786270188,
+      "evidence": "0x0FBeF3524E824770E98F2D1A497CB559b007E797"
+    },
+    "fund": {
+      "doneAt": 1786270188,
+      "evidence": "state=Active"
+    },
+    "heartbeat": {
+      "doneAt": 1786270393,
+      "evidence": "epoch=1"
+    },
+    "handover": {
+      "doneAt": 1786270575,
+      "evidence": "self-attested"
+    },
+    "drill": {
+      "doneAt": 1786270640,
+      "evidence": "6:17:06 AM · SilenceNotProven refused in a live-chain staticCall · run-tagged"
+    },
+    "debrief": {
+      "doneAt": 1786270708,
+      "evidence": "3/3 correct"
+    }
+  },
+  "answers": {
+    "keys": "B",
+    "early": "B",
+    "veto": "B"
+  },
+  "build": "4e1a8c0",
+  "debriefScore": [
+    {
+      "id": "keys",
+      "answered": "B",
+      "correct": true
+    },
+    {
+      "id": "early",
+      "answered": "B",
+      "correct": true
+    },
+    {
+      "id": "veto",
+      "answered": "B",
+      "correct": true
+    }
+  ]
+}

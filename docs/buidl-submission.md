@@ -78,7 +78,11 @@ Everything — first commit to live product during Flare Summer Signal (July 202
 
 ## User validation
 
-The product ships a two-person **rehearsal run sheet** (https://heirloom.axiqo.xyz/rehearsal): seven steps for an owner–beneficiary pair, four completion-checked purely against chain/keeper evidence, one against the local wallet session, two explicitly self-attested — ending in a participant-held receipt. The protocol lifecycle has scripted end-to-end verification on the live stack; the rehearsal UI has undergone a documented persona-based walkthrough, and its evidence-verdict logic is unit-tested. **We claim no human-subject numbers** — run the rehearsal as a pair and hold the receipt yourself.
+The product ships a two-person **rehearsal run sheet** (https://heirloom.axiqo.xyz/rehearsal): seven steps for an owner–beneficiary pair, four completion-checked purely against chain/keeper evidence, one against the local wallet session, two explicitly self-attested — ending in a participant-held receipt.
+
+**Test Person 01** completed 7/7 in **14m 10s** with a **3/3** debrief using a real browser, two XRPL Testnet accounts, the deployed Coston2 contracts, and the production keeper. The owner then cancelled; the vault reached `Cancelled`, reconciled to **0 FXRP**, and **9.95 test XRP** returned. Public validation page: https://heirloom.axiqo.xyz/validation · evidence pack: https://github.com/a252937166/heirloom/tree/main/docs/validation/test-person-01.
+
+This was an engineering-operated, human-style Test Person simulation — useful as real-data product and flow evidence, but **not an external human-subject pair and not counted as a user, pair, or unassisted-human result**. We still claim no human-subject numbers; actual human validation remains a separate collection task.
 
 ## Honest boundaries
 
@@ -91,12 +95,13 @@ Mainnet with 90–180-day periods and 7-day rolling checkpoints · lost-key self
 
 > 运营备注：User validation 已在上方 Details 围栏**内**（复制时自动带上）。绝不写编造的人数；若截止前收到真人演练收据，把真实数字加回该段：`N pairs · median X min · drill refusals (live-chain staticCall)`，并严格区分 guided / unassisted。
 >
-> **AI 人设运行的红线**：AI 驱动的演练只能标注为 `disclosed AI-persona run`，**永不计入 pairs / users / unassisted 任何人数口径**。它的价值只有两个：①证明流程端到端可跑通（flow verification）②当可用性走查用（发现的摩擦点照常修）。收据里 `runType` 与本地记录都必须能追溯到"这是 AI 跑的"。截止前若一组真人都没有，User validation 段就保持现在这句"不主张人数、评委自己跑"，**不要**用 AI 收据充数。
+> **Test Person 运行的红线**：工程模拟永不计入 pairs / users / unassisted 任何真人口径。它只证明真实数据下的端到端流程和可用性走查结果；披露放在公开验证报告中，不向产品 receipt/session 增加 persona 或 founder 字段。截止前若一组外部真人都没有，就继续明确“不主张 human-subject numbers”，不要用 Test Person 收据充数。
 
 ## 评委可测清单（Details 末尾或 comment 区可补）
 
 - Live case（60 秒无钱包审计线路）: https://heirloom.axiqo.xyz/case/001
 - Rehearsal（双人演练台，链上判定 + 可下载收据）: https://heirloom.axiqo.xyz/rehearsal
+- Public validation（Test Person 01，真实测试网工程走查，非真人数量）: https://heirloom.axiqo.xyz/validation
 - Live: https://heirloom.axiqo.xyz （创建自己的金库全程真实交易；GemWallet 优先，MetaMask/OKX 自动加 Coston2）
 - Factory explorer (v4): https://coston2-explorer.flare.network/address/0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f
 - Canonical v4 生命周期与历史 provenance 全部见 README（一个当前案例、一套数字、一条主证据链）

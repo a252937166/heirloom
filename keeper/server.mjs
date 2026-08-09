@@ -540,7 +540,7 @@ const VAULT_ERRORS = new Interface([
 // is ever executed by this endpoint.
 // per-state drill semantics: the staticCall is evaluated against LIVE chain
 // state but broadcasts nothing — the result lands in this journal, and the
-// structured fields (drillStage/vaultState/reason) are what run sheets judge;
+// structured fields (drillStage/vaultState/reason/evaluatedBlock/insideOwnerWindow/rh) are what run sheets judge;
 // prose is for humans, never for verdicts.
 const DRILL_STAGE = { 2: "owner-active-window", 3: "challenge", 4: "releasing", 5: "released", 6: "cancelled", 7: "cancelling" };
 const DRILL_SENTENCE = {
@@ -558,14 +558,29 @@ app.post("/api/vaults/:addr/simulate-early-claim", async (req, res) => {
   const rh = typeof req.body?.rh === "string" && /^rh-[a-z0-9-]{4,40}$/.test(req.body.rh) ? req.body.rh : undefined;
   try {
     const v = vaultAt(req.params.addr);
-    const [state, deadline] = await Promise.all([v.state(), v.silenceDeadline()]);
+    // Pin every fact in this verdict to one Coston2 block. Mixing two RPC
+    // heads (or the keeper host clock) could otherwise manufacture an
+    // owner-window result that never existed on-chain.
+    const block = await provider.getBlock("latest");
+    if (!block) throw new Error("latest Coston2 block unavailable");
+    const blockTag = block.number;
+    const [state, deadline] = await Promise.all([
+      v.state({ blockTag }),
+      v.silenceDeadline({ blockTag }),
+    ]);
     const st = Number(state);
-    const now = Math.floor(Date.now() / 1000);
+    const silenceDeadline = Number(deadline);
+    const evaluation = {
+      evaluatedAt: Number(block.timestamp),
+      evaluatedBlock: blockTag,
+      silenceDeadline,
+      insideOwnerWindow: Number(block.timestamp) <= silenceDeadline,
+    };
     const tag = rh ? { rh } : {};
     try {
-      await v.startClaim.staticCall(beneficiaryXrpl);
-      rec(req.params.addr, "drill", "Early-claim drill: the inactivity window has elapsed — a real claim could start now (nothing was executed)", { tone: "warn", drillStage: "window-open", vaultState: st, ...tag });
-      return res.json({ blocked: false, stage: "window-open", reason: "SILENCE_WINDOW_ELAPSED", vaultState: st, fundsMoved: "0", ...tag });
+      await v.startClaim.staticCall(beneficiaryXrpl, { blockTag });
+      rec(req.params.addr, "drill", "Early-claim drill: the inactivity window has elapsed — a real claim could start now (nothing was executed)", { tone: "warn", drillStage: "window-open", vaultState: st, ...evaluation, ...tag });
+      return res.json({ blocked: false, stage: "window-open", reason: "SILENCE_WINDOW_ELAPSED", vaultState: st, fundsMoved: "0", ...evaluation, ...tag });
     } catch (e) {
       let reason = null;
       const data = e.data ?? e.info?.error?.data;
@@ -580,7 +595,7 @@ app.post("/api/vaults/:addr/simulate-early-claim", async (req, res) => {
         sentence
           ? `Early-claim drill: blocked — ${sentence} (funds moved: 0)`
           : `Early-claim drill: blocked on-chain (${reason}) — funds moved: 0`,
-        { tone: "ok", drillStage: stage, vaultState: st, reason, ...tag });
+        { tone: "ok", drillStage: stage, vaultState: st, reason, ...evaluation, ...tag });
       return res.json({
         blocked: true,
         stage,
@@ -588,11 +603,12 @@ app.post("/api/vaults/:addr/simulate-early-claim", async (req, res) => {
         vaultState: st,
         detail: sentence
           ?? (reason === "SilenceNotProven"
-            ? (now <= Number(deadline)
+            ? (evaluation.insideOwnerWindow
                 ? "the owner is inside their window — the FDC verifier would answer REFERENCED TRANSACTION EXISTS; the proof cannot even be built"
                 : "no silence attestation has been submitted for this window yet")
             : undefined),
         fundsMoved: "0",
+        ...evaluation,
         ...tag,
       });
     }

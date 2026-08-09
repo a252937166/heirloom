@@ -75,6 +75,10 @@ export function markDone(s: RehearsalSession, id: StepId, evidence?: string): Re
   return next;
 }
 
+export function canBindVault(boundVault: string | undefined, candidate: string): boolean {
+  return !boundVault || boundVault.toLowerCase() === candidate.toLowerCase();
+}
+
 export const stepIndex = (id: StepId) => REHEARSAL_STEPS.indexOf(id);
 export const firstOpenStep = (s: RehearsalSession): StepId | null =>
   REHEARSAL_STEPS.find((id) => !s.steps[id]) ?? null;
@@ -92,6 +96,10 @@ export interface DrillEventLike {
   vaultState?: number;
   reason?: string;
   drillStage?: string;
+  evaluatedAt?: number;
+  evaluatedBlock?: number;
+  silenceDeadline?: number;
+  insideOwnerWindow?: boolean;
   rh?: string;
 }
 
@@ -100,7 +108,12 @@ export function drillSatisfies(e: DrillEventLike, s: Pick<RehearsalSession, "run
   if (e.at < s.startedAt) return false; // a previous run's drill can never advance this one
   if (e.vaultState !== 2) return false; // the real safety drill runs against an Active plan
   if (e.reason !== "SilenceNotProven") return false;
-  if (e.rh && e.rh !== s.runId) return false; // tagged for a different run sheet
+  if (typeof e.evaluatedBlock !== "number" || !Number.isSafeInteger(e.evaluatedBlock) || e.evaluatedBlock < 0) return false;
+  if (typeof e.evaluatedAt !== "number" || !Number.isSafeInteger(e.evaluatedAt) || e.evaluatedAt < 0) return false;
+  if (typeof e.silenceDeadline !== "number" || !Number.isSafeInteger(e.silenceDeadline) || e.silenceDeadline < 0) return false;
+  if (e.evaluatedAt > e.silenceDeadline) return false; // the flag must agree with the pinned block timestamp
+  if (e.insideOwnerWindow !== true) return false; // proof absence after the deadline is not an owner-liveness drill
+  if (e.rh !== s.runId) return false; // untagged or differently tagged events belong to no/another run sheet
   return true;
 }
 

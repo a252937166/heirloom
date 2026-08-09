@@ -32,10 +32,15 @@ Chronology (see `git log` for the full record):
    today" as a product surface: a two-person, seven-step guided run. Four checks flip only on chain or
    keeper evidence (vault answers, Active state, heartbeat epoch growth, the live-chain `staticCall`
    refusal recorded in the keeper's public journal), the wallet step is evidenced by the local session,
-   and the two interpersonal steps say "self-attested". The drill verdict is structural — Active plan +
-   `SilenceNotProven` + this run's tag — so a friendly refusal on a settled plan can never complete it;
-   fresh plans and pre-existing plans are classified apart on the participant-held receipt. A persona-based
-   cognitive walkthrough hardened the novice funnel; the verdict logic is pure-function unit-tested in CI.
+   and the two interpersonal steps say "self-attested". The drill verdict is structural — one pinned Coston2
+   block, Active plan, `SilenceNotProven`, still inside the owner's deadline, and this run's tag — so an
+   untagged, late, or settled-plan refusal can never complete it; fresh plans and pre-existing plans are
+   classified apart on the participant-held receipt. The verdict logic is pure-function unit-tested in CI.
+8. **Public real-data validation** — Test Person 01 completed the 7/7 manual-XRPL rehearsal in 14m 10s with
+   a 3/3 debrief, then cancelled and fully settled: `Cancelled`, 0 FXRP, 9.95 test XRP returned. The public
+   `/validation` page and `docs/validation/test-person-01/` expose the vault, transaction links, receipt,
+   keeper journal, checksums, and cleanup evidence. This is explicitly an engineering-operated Test Person
+   simulation, not an external human-subject pair and not a claimed user count.
 
-Frozen submission state: tag `submission-v8` — the tag's commit is the single source of truth and is shown verbatim in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
+Last public frozen/deployed base: tag `submission-v10` at `4e1a8c004480c0cc1c72f80f9ede7685d006aadf`. The receipt-boundary and validation-visibility work in the current tree is post-v10 and must not be described as frozen or deployed until its release is committed, tagged, and verified. For that next release, the tag's commit is the single source of truth and must be shown verbatim in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
 `node spike/build-case.mjs` (defaults to the canonical v4 vault `0x35975770e1eD5431e0bFCaBB238B6188c94AeAdA`), then validate with `node spike/validate-case.mjs`.

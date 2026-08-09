@@ -5,7 +5,7 @@ import { readVault, short, vaultsOfOwner } from "../lib/chain";
 import {
   REHEARSAL_STEPS, StepId, RehearsalSession,
   loadSession, newSession, saveSession, clearSession, markDone, doneCount, buildReceipt,
-  drillSatisfies, classifyRun, heartbeatSatisfies, DrillEventLike,
+  drillSatisfies, classifyRun, heartbeatSatisfies, canBindVault, DrillEventLike,
 } from "../lib/rehearsal";
 import { useWallet } from "../App";
 import { CopyBtn } from "../components/CopyBtn";
@@ -105,10 +105,28 @@ export function Rehearsal() {
   const bindVault = useCallback(async (addr: string) => {
     setBindErr(null);
     if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) { setBindErr("That is not a Coston2 contract address (0x…, 42 characters)."); return; }
+    const beforeRead = fresh();
+    if (!beforeRead) return;
+    if (!canBindVault(beforeRead.vault, addr)) {
+      setBindErr(`This rehearsal is already bound to ${short(beforeRead.vault!, 8)}. Restart the rehearsal to use another plan.`);
+      return;
+    }
     try {
       const v = await readVault(addr);
       const cur = fresh();
       if (!cur) return;
+      // A second click may resolve after another address already bound. Re-read
+      // after the network call so concurrent attempts cannot mix two vaults.
+      if (!canBindVault(cur.vault, addr)) {
+        setBindErr(`This rehearsal is already bound to ${short(cur.vault!, 8)}. Restart the rehearsal to use another plan.`);
+        return;
+      }
+      // Re-selecting the same plan is a harmless refresh. Never move its
+      // baseline forward or rewrite first-completion evidence.
+      if (cur.vault) {
+        setVaultState(v.state);
+        return;
+      }
       // the receipt must never confuse "this run did it" with "history already
       // had it": classify by creation time and freeze a baseline to judge against
       const runType = classifyRun(v.creationTs, cur.startedAt);
@@ -150,10 +168,11 @@ export function Rehearsal() {
         const r = await fetch(`${CONFIG.api}/vaults/${cur.vault}`);
         if (r.ok) {
           const evs: DrillEventLike[] = (await r.json()).events ?? [];
-          // verdict is structural (Active vault + SilenceNotProven + this run) —
-          // a friendly "blocked" on a settled plan can never complete the drill
+          // verdict is structural (Active + SilenceNotProven + inside the owner
+          // window + this run) — a friendly "blocked" after the deadline or on
+          // a settled plan can never complete the drill
           const hit = evs.find((e) => drillSatisfies(e, s));
-          if (hit) s = markDone(s, "drill", `${fmtClock(hit.at)} · SilenceNotProven refused in a live-chain staticCall${hit.rh ? " · run-tagged" : ""}`);
+          if (hit) s = markDone(s, "drill", `${fmtClock(hit.at)} · SilenceNotProven refused in a live-chain staticCall · Coston2 block ${hit.evaluatedBlock} · owner-window=true · run-tagged`);
         }
       }
       if (s !== cur) update(s);
@@ -329,7 +348,7 @@ export function Rehearsal() {
     drill: {
       title: "Beneficiary runs the early-claim drill",
       who: "BENEFICIARY",
-      verified: "verified when the keeper's public journal records THIS run's live-chain staticCall refusal (SilenceNotProven, on an Active plan)",
+      verified: "verified when the keeper records THIS run's live-chain staticCall refusal (SilenceNotProven, Active, and still inside the owner's window)",
       instruction: (
         <>
           <div className="notice warn" style={{ marginBottom: 10 }}>
@@ -340,8 +359,8 @@ export function Rehearsal() {
             On the claim page they enter their XRPL address and press <strong>"Test early-claim protection"</strong>.
             The contract refuses in a live-chain <span className="mono">staticCall</span> — no transaction is
             broadcast, no funds move — and the keeper records the refusal in its public journal. Only a{" "}
-            <span className="mono">SilenceNotProven</span> refusal on an <strong>Active</strong> plan completes
-            this step; friendly refusals on settled plans do not count.
+            <span className="mono">SilenceNotProven</span> refusal on an <strong>Active</strong> plan while the owner
+            is still inside their deadline completes this step; untagged, late, or settled-plan refusals do not count.
           </p>
           {vaultState != null && vaultState >= 3 && (
             <div className="notice err" style={{ marginTop: 8 }}>

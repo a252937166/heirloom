@@ -89,6 +89,12 @@ beneficiary's wallet ◀─── real XRP
 
 Demo timing note: heartbeat periods are minutes on testnet so the full story is visible in one sitting; production timing would be 90–180 days with 7-day rolling checkpoints: the ~14-day attestation depth was measured, the chaining is contract-enforced, and the keeper now runs a checkpoint scheduler (compressed interval on testnet) that chains proof segments automatically before the window slides away.
 
+## User validation — real data, disclosed scope
+
+[Test Person 01](https://heirloom.axiqo.xyz/validation) completed the full 7/7 rehearsal in **14m 10s** with a **3/3** debrief using a real browser, two XRPL Testnet accounts, the deployed Coston2 contracts, and the production keeper. The owner then cancelled; the vault reached `Cancelled`, reconciled to **0 FXRP**, and **9.95 test XRP** returned to the owner. The [public evidence pack](docs/validation/test-person-01/README.md) links the vault, payments, proof transactions, receipt, keeper journal, checksums, and cleanup result.
+
+This is an engineering-operated, human-style **Test Person simulation**, not an external human-subject pair. It is product and flow evidence only; **we claim no human-user or human-pair count from it**. Actual human validation remains a separate collection task.
+
 ## Repository
 
 | path | contents |
