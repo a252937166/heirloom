@@ -91,7 +91,9 @@ Demo timing note: heartbeat periods are minutes on testnet so the full story is 
 
 ## User validation — real data, disclosed scope
 
-[Test Person 01](https://heirloom.axiqo.xyz/validation) completed the full 7/7 rehearsal in **14m 10s** with a **3/3** debrief using a real browser, two XRPL Testnet accounts, the deployed Coston2 contracts, and the production keeper. The owner then cancelled; the vault reached `Cancelled`, reconciled to **0 FXRP**, and **9.95 test XRP** returned to the owner. The [public evidence pack](docs/validation/test-person-01/README.md) links the vault, payments, proof transactions, receipt, keeper journal, checksums, and cleanup result.
+[Test Person 02](https://heirloom.axiqo.xyz/validation) is the latest release verification for build `7e010a3`: 7/7 completed in **12m 00s**, **3/3** debrief, using a real browser, two XRPL Testnet accounts, the deployed Coston2 contracts, and the production keeper. The strict drill was evaluated at pinned Coston2 block `33819040` with `insideOwnerWindow=true` and the matching run tag. The owner then cancelled; the vault reached `Cancelled`, reconciled to **0 FXRP**, and **9.95 test XRP** returned. The [TP02 evidence pack](docs/validation/test-person-02/README.md) links every artifact.
+
+[Test Person 01](docs/validation/test-person-01/README.md) remains the submission-v10 baseline: 7/7 in 14m 10s with 3/3 debrief and complete cleanup. It predates the strict pinned-block receipt semantics, which TP02 verifies after deployment.
 
 This is an engineering-operated, human-style **Test Person simulation**, not an external human-subject pair. It is product and flow evidence only; **we claim no human-user or human-pair count from it**. Actual human validation remains a separate collection task.
 

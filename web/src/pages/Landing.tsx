@@ -132,10 +132,10 @@ export function Landing() {
       <section className="wrap rise" style={{ padding: "0 24px 26px", animationDelay: "0.12s" }}>
         <Link to="/validation" className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap", textDecoration: "none", borderColor: "color-mix(in srgb, var(--verdant) 28%, var(--line))" }}>
           <span style={{ minWidth: 0 }}>
-            <span className="eyebrow" style={{ display: "block", color: "var(--verdant)", marginBottom: 6 }}>TEST PERSON 01 · PUBLIC VALIDATION</span>
-            <span style={{ color: "var(--paper)", fontWeight: 700 }}>7/7 completed in 14m 10s · debrief 3/3</span>
+            <span className="eyebrow" style={{ display: "block", color: "var(--verdant)", marginBottom: 6 }}>TEST PERSON 02 · LATEST RELEASE VERIFICATION</span>
+            <span style={{ color: "var(--paper)", fontWeight: 700 }}>7/7 in 12m 00s · debrief 3/3 · strict pinned-block receipt passed</span>
             <span style={{ display: "block", color: "var(--mist-2)", fontSize: "0.76rem", marginTop: 3 }}>
-              Real testnet path · Cancelled · 0 FXRP · refund settled · engineering simulation, not a human count
+              Build 7e010a3 · block 33819040 · Cancelled · 0 FXRP · refund settled · TP01 baseline retained
             </span>
           </span>
           <span className="mono" style={{ fontSize: "0.72rem", color: "var(--lamplight-strong)", whiteSpace: "nowrap" }}>audit the run →</span>

@@ -1,0 +1,70 @@
+{
+  "kind": "heirloom-rehearsal-receipt",
+  "disclosure": "participant-held receipt — evidence-backed steps cite chain/keeper state; self-attested steps remain self-attested; not a cryptographic proof",
+  "runId": "rh-mslpxllp-5qgx0p",
+  "runType": "fresh-plan",
+  "vault": "0x5bbc816136a7ee4e3eb7147e28064bb367a53075",
+  "mode": "manual",
+  "baseline": {
+    "state": 2,
+    "heartbeatEpoch": 0,
+    "creationTs": 1786274960,
+    "boundAt": 1786275211
+  },
+  "startedAt": 1786274863,
+  "completedAt": 1786275583,
+  "totalSeconds": 720,
+  "steps": {
+    "wallet": {
+      "doneAt": 1786274877,
+      "evidence": "manual path"
+    },
+    "create": {
+      "doneAt": 1786275211,
+      "evidence": "0x5bbc816136a7ee4e3eb7147e28064bb367a53075"
+    },
+    "fund": {
+      "doneAt": 1786275211,
+      "evidence": "state=Active"
+    },
+    "heartbeat": {
+      "doneAt": 1786275495,
+      "evidence": "epoch=1"
+    },
+    "handover": {
+      "doneAt": 1786275513,
+      "evidence": "self-attested"
+    },
+    "drill": {
+      "doneAt": 1786275551,
+      "evidence": "7:39:09 AM · SilenceNotProven refused in a live-chain staticCall · Coston2 block 33819040 · owner-window=true · run-tagged"
+    },
+    "debrief": {
+      "doneAt": 1786275583,
+      "evidence": "3/3 correct"
+    }
+  },
+  "answers": {
+    "keys": "B",
+    "early": "B",
+    "veto": "B"
+  },
+  "build": "7e010a3",
+  "debriefScore": [
+    {
+      "id": "keys",
+      "answered": "B",
+      "correct": true
+    },
+    {
+      "id": "early",
+      "answered": "B",
+      "correct": true
+    },
+    {
+      "id": "veto",
+      "answered": "B",
+      "correct": true
+    }
+  ]
+}

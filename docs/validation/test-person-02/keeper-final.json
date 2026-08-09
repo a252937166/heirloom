@@ -1,0 +1,114 @@
+{
+  "events": [
+    {
+      "at": 1786274961,
+      "kind": "created",
+      "label": "Vault created for rGRRECsJ… → rKZo43bi… (XRPL owner)",
+      "txFlare": "0xeede4db70ea2d9171cbb6386b7de3274a0c39475108b3c9f1811c148ed1ede81",
+      "tone": "gold"
+    },
+    {
+      "at": 1786275014,
+      "kind": "funding",
+      "label": "Funding payment detected on the core vault — proving it to Flare (FDC XRPPayment)",
+      "txXrpl": "26DD1EB6A84F40048741AADEA41D1AA83074B95A72671D72C092B562D8DD28D8"
+    },
+    {
+      "at": 1786275162,
+      "kind": "minted",
+      "label": "FXRP minted into the vault: 10 FXRP",
+      "txFlare": "0x94e690a984ee957b7c901da83bf3581800b704112e8c58aa42da3eda41e8fe60",
+      "round": 1420500,
+      "tone": "ok"
+    },
+    {
+      "at": 1786275166,
+      "kind": "active",
+      "label": "Vault is ACTIVE — the dial is live",
+      "txFlare": "0x27d9e7e0153667b0f7184c8adbb75cdf08a5b579de22887e14d8553005cce71d",
+      "tone": "ok"
+    },
+    {
+      "at": 1786275285,
+      "kind": "heartbeat",
+      "label": "Heartbeat detected on the beacon — proving it",
+      "txXrpl": "EE6B569037A255BDF4CEA7AB567102EFE09C700FD3601F9DCF53ED8F21D2147F"
+    },
+    {
+      "at": 1786275430,
+      "kind": "alive",
+      "label": "Heartbeat proven — epoch 1, dial reset",
+      "txFlare": "0x713f69c9421976e9662d18a91172daa6415233c6c082265753988b909b479305",
+      "round": 1420503,
+      "tone": "ok"
+    },
+    {
+      "at": 1786275549,
+      "kind": "drill",
+      "label": "Early-claim drill: blocked on-chain (SilenceNotProven) — funds moved: 0",
+      "tone": "ok",
+      "drillStage": "owner-active-window",
+      "vaultState": 2,
+      "reason": "SilenceNotProven",
+      "evaluatedAt": 1786275546,
+      "evaluatedBlock": 33819040,
+      "silenceDeadline": 1786275912,
+      "insideOwnerWindow": true,
+      "rh": "rh-mslpxllp-5qgx0p"
+    },
+    {
+      "at": 1786275674,
+      "kind": "cancelSeen",
+      "label": "Cancel command detected on the beacon — proving it",
+      "txXrpl": "6B8D018EF9A6B54B4318F9D586399200F71C1C1753425FBE5AED879FFC019219",
+      "tone": "warn"
+    },
+    {
+      "at": 1786275806,
+      "kind": "cancelled",
+      "label": "Plan cancelled — the vault is redeeming everything back to the owner's XRPL wallet",
+      "txFlare": "0x00761100c23f2f7542c5e811790ac5fe3b0370a554fcdfa824eae2be6e5ba2e5",
+      "tone": "gold"
+    },
+    {
+      "at": 1786275837,
+      "kind": "settled",
+      "label": "Redemption #44366610 settled: 9.95 XRP delivered with payment reference 0x464250526641…",
+      "txXrpl": "77F2AF6875486C4DFA69E996BDF9F17B3AF7B31A41534466F47AE33EE30BDC22",
+      "tone": "ok"
+    }
+  ],
+  "job": null,
+  "recovery": {
+    "ownerXrpl": "rGRRECsJ1NTPM7yehmCq9uyhzYvHpNtXqx",
+    "ownerEvm": null,
+    "mode": "xrpl",
+    "beneficiaryXrpl": "rKZo43bi3Vt5ba9gKzUbzMGx4tXV9NUXpq",
+    "reference": "0xd2be45a47fabe0dd7907b106de141bd317bd03622084e96d67741f092e763e94",
+    "beacon": "r4vEYPxYkEWzoEySUETDRgnUKu8GG9b1GN"
+  },
+  "receipt": {
+    "redemptions": [
+      {
+        "requestId": "44366610",
+        "paymentReference": "0x4642505266410002000000000000000000000000000000000000000002a4fb12",
+        "valueUBA": "10000000",
+        "feeUBA": "50000",
+        "agentVault": "0x165c62b4531D28E34c68a8b2aCBF4D0421e4E028",
+        "paymentAddress": "rGRRECsJ1NTPM7yehmCq9uyhzYvHpNtXqx",
+        "firstUnderlyingBlock": "19763045",
+        "lastUnderlyingBlock": "19763594",
+        "lastUnderlyingTimestamp": "1786276562"
+      }
+    ],
+    "settlements": [
+      {
+        "requestId": "44366610",
+        "deliveredDrops": "9950000",
+        "txXrpl": "77F2AF6875486C4DFA69E996BDF9F17B3AF7B31A41534466F47AE33EE30BDC22",
+        "paymentReference": "0x4642505266410002000000000000000000000000000000000000000002a4fb12"
+      }
+    ],
+    "awaitingSettlement": []
+  }
+}

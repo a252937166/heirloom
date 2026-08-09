@@ -80,7 +80,9 @@ Everything — first commit to live product during Flare Summer Signal (July 202
 
 The product ships a two-person **rehearsal run sheet** (https://heirloom.axiqo.xyz/rehearsal): seven steps for an owner–beneficiary pair, four completion-checked purely against chain/keeper evidence, one against the local wallet session, two explicitly self-attested — ending in a participant-held receipt.
 
-**Test Person 01** completed 7/7 in **14m 10s** with a **3/3** debrief using a real browser, two XRPL Testnet accounts, the deployed Coston2 contracts, and the production keeper. The owner then cancelled; the vault reached `Cancelled`, reconciled to **0 FXRP**, and **9.95 test XRP** returned. Public validation page: https://heirloom.axiqo.xyz/validation · evidence pack: https://github.com/a252937166/heirloom/tree/main/docs/validation/test-person-01.
+**Test Person 02** is the latest release verification for build `7e010a3`: 7/7 in **12m 00s**, **3/3** debrief, real browser, two XRPL Testnet accounts, deployed Coston2 contracts, and the production keeper. The strict drill event records pinned block `33819040`, `insideOwnerWindow=true`, and run tag `rh-mslpxllp-5qgx0p`. The owner then cancelled; the vault reached `Cancelled`, reconciled to **0 FXRP**, and **9.95 test XRP** returned. Public validation: https://heirloom.axiqo.xyz/validation · TP02 evidence: https://github.com/a252937166/heirloom/tree/main/docs/validation/test-person-02.
+
+**Test Person 01** remains the submission-v10 baseline (7/7, 14m 10s, 3/3, fully cleaned up); it predates the strict pinned-block receipt semantics now verified by TP02. Baseline evidence: https://github.com/a252937166/heirloom/tree/main/docs/validation/test-person-01.
 
 This was an engineering-operated, human-style Test Person simulation — useful as real-data product and flow evidence, but **not an external human-subject pair and not counted as a user, pair, or unassisted-human result**. We still claim no human-subject numbers; actual human validation remains a separate collection task.
 
@@ -101,7 +103,7 @@ Mainnet with 90–180-day periods and 7-day rolling checkpoints · lost-key self
 
 - Live case（60 秒无钱包审计线路）: https://heirloom.axiqo.xyz/case/001
 - Rehearsal（双人演练台，链上判定 + 可下载收据）: https://heirloom.axiqo.xyz/rehearsal
-- Public validation（Test Person 01，真实测试网工程走查，非真人数量）: https://heirloom.axiqo.xyz/validation
+- Public validation（TP02 最新 release verification；TP01 baseline；非真人数量）: https://heirloom.axiqo.xyz/validation
 - Live: https://heirloom.axiqo.xyz （创建自己的金库全程真实交易；GemWallet 优先，MetaMask/OKX 自动加 Coston2）
 - Factory explorer (v4): https://coston2-explorer.flare.network/address/0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f
 - Canonical v4 生命周期与历史 provenance 全部见 README（一个当前案例、一套数字、一条主证据链）

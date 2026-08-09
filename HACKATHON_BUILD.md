@@ -36,11 +36,12 @@ Chronology (see `git log` for the full record):
    block, Active plan, `SilenceNotProven`, still inside the owner's deadline, and this run's tag — so an
    untagged, late, or settled-plan refusal can never complete it; fresh plans and pre-existing plans are
    classified apart on the participant-held receipt. The verdict logic is pure-function unit-tested in CI.
-8. **Public real-data validation** — Test Person 01 completed the 7/7 manual-XRPL rehearsal in 14m 10s with
-   a 3/3 debrief, then cancelled and fully settled: `Cancelled`, 0 FXRP, 9.95 test XRP returned. The public
-   `/validation` page and `docs/validation/test-person-01/` expose the vault, transaction links, receipt,
-   keeper journal, checksums, and cleanup evidence. This is explicitly an engineering-operated Test Person
-   simulation, not an external human-subject pair and not a claimed user count.
+8. **Public real-data validation** — Test Person 02 is the deployed release verification for build `7e010a3`:
+   7/7 manual-XRPL rehearsal in 12m 00s, 3/3 debrief, strict drill pinned to Coston2 block `33819040` with
+   `insideOwnerWindow=true` and matching run tag, then `Cancelled`, 0 FXRP, and 9.95 test XRP returned.
+   `docs/validation/test-person-02/` holds the public artifacts. Test Person 01 remains the submission-v10
+   full-path baseline (7/7, 14m 10s, 3/3, complete cleanup) and is explicitly not used to prove the newer
+   pinned-block semantics. Both are engineering simulations, not external human-subject pairs or user counts.
 
-Last public frozen/deployed base: tag `submission-v10` at `4e1a8c004480c0cc1c72f80f9ede7685d006aadf`. The receipt-boundary and validation-visibility work in the current tree is post-v10 and must not be described as frozen or deployed until its release is committed, tagged, and verified. For that next release, the tag's commit is the single source of truth and must be shown verbatim in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
+Release verification was executed against `7e010a35bedca51d6bedef8b6b7546b4b45ca4cf` (`7e010a3`). Frozen submission state is the annotated tag `submission-v11`; that tag adds the TP02 evidence and presentation after the tested release while leaving the receipt and keeper semantics unchanged. The tag commit is the single source of truth shown in the site footer and `/api/health` (`build` field). Regenerate the case manifest with
 `node spike/build-case.mjs` (defaults to the canonical v4 vault `0x35975770e1eD5431e0bFCaBB238B6188c94AeAdA`), then validate with `node spike/validate-case.mjs`.

@@ -1,0 +1,37 @@
+{
+  "kitId": "HL-5BBC-3075",
+  "schema": "heirloom-recovery/v4",
+  "vault": "0x5bbc816136a7ee4e3eb7147e28064bb367a53075",
+  "network": {
+    "flare": "Coston2 (chainId 114)",
+    "xrpl": "testnet"
+  },
+  "contracts": {
+    "factory": "0x8FFD0a1DeAb498A5F0A2798bBefb2C071091a77f",
+    "implementation": "0xDe3816E38c2cd8F3CD9c8AE10C0a33CD7f7a8A48",
+    "fxrp": "0x0b6A3645c240605887a5532109323A3E12273dc7",
+    "assetManager": "0xc1Ca88b937d0b528842F95d5731ffB586f4fbDFA"
+  },
+  "owner": "rGRRECsJ1NTPM7yehmCq9uyhzYvHpNtXqx",
+  "ownerMode": "xrpl",
+  "beneficiary": "rKZo43bi3Vt5ba9gKzUbzMGx4tXV9NUXpq",
+  "heartbeatBeacon": "r4vEYPxYkEWzoEySUETDRgnUKu8GG9b1GN",
+  "heartbeatReference": "0xd2be45a47fabe0dd7907b106de141bd317bd03622084e96d67741f092e763e94",
+  "claimUrl": "https://heirloom.axiqo.xyz/claim/0x5bbc816136a7ee4e3eb7147e28064bb367a53075",
+  "rules": {
+    "heartbeatPeriodSec": 600,
+    "gracePeriodSec": 60,
+    "challengePeriodSec": 120,
+    "vetoProofGraceSec": 180
+  },
+  "proofRecipe": "silence proof = FDC ReferencedPaymentNonexistence over the beacon with the heartbeat reference, checkSourceAddresses=true, sourceAddressesRoot=keccak256(keccak256(owner)), chained from lastHeartbeatLedger+1; then startClaim(beneficiary) → owner heartbeat cutoff (challenge end; a heartbeat proof with XRPL timestamp ≤ the cutoff still vetoes during the grace) → wait the veto-proof grace → executeRelease only after releaseEligibleAt",
+  "claimSteps": [
+    "1. Start the claim: startClaim(beneficiary) once silence is proven.",
+    "2. Wait until the owner heartbeat cutoff (claimChallengeEndsAt) — an owner heartbeat whose XRPL timestamp is <= the cutoff still vetoes during the grace.",
+    "3. Wait through the additional proof settlement buffer (180s).",
+    "4. Execute the release only after releaseEligibleAt = cutoff + buffer; earlier calls revert ChallengeNotOver."
+  ],
+  "buildSha": "7e010a3",
+  "generatedAt": "2026-08-09T11:38:02.492Z",
+  "checksum": "0x94740aaa86260988a420ae6899e15531fbe5c71a7e22f9f18eabba185384fc31"
+}
